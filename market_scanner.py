@@ -10,6 +10,7 @@ from pycoingecko import CoinGeckoAPI
 # --- Basic Setup ---
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+#api_key = os.getenv('COINGECKO_API_KEY')
 
 # It's good practice to define intents
 intents = discord.Intents.default()
@@ -18,14 +19,14 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Initialize the CoinGecko API client
+#cg = CoinGeckoAPI(api_key = api_key)
 cg = CoinGeckoAPI()
-
 # --- Configuration ---
 # You can easily change these settings
 CONFIG = {
     'ALERT_CHANNEL_ID': 1385799309211078737,      # <<< IMPORTANT: REPLACE WITH YOUR CHANNEL ID
     'TOP_N_COINS': 20,              # Number of top coins to monitor
-    'PRICE_CHANGE_THRESHOLD': 1.0,  # Alert if price moves by this % or more
+    'PRICE_CHANGE_THRESHOLD': 4,  # Alert if price moves by this % or more
     'CHECK_INTERVAL_MINUTES': 5,   # How often to check the market
     'ALERT_COOLDOWN_HOURS': 0.1       # Cooldown period for a coin after an alert
 }
@@ -43,72 +44,69 @@ async def on_ready():
     check_price_movements.start()
 
 
+
 @tasks.loop(minutes=CONFIG['CHECK_INTERVAL_MINUTES'])
 async def check_price_movements():
     """The main background task to scan the market for significant price movements."""
     try:
-        print(f"[{datetime.datetime.now()}] Checking for major price movements...")
+        print(f"[{datetime.datetime.now()}] --- Starting New Check ---")
 
-        # 1. Get the list of top N coins by market cap
+        alert_channel = bot.get_channel(CONFIG['ALERT_CHANNEL_ID'])
+        if not alert_channel:
+            print(f"!!! CRITICAL ERROR: Could not find channel with ID {CONFIG['ALERT_CHANNEL_ID']}.")
+            return
+        print(f"Successfully found channel: #{alert_channel.name}")
+
+        # --- THE FIX IS HERE ---
+        # We now use get_coins_markets and ask for the '1h' price change percentage.
+        # This one API call gets us everything we need.
         markets = cg.get_coins_markets(
             vs_currency='usd',
             order='market_cap_desc',
             per_page=CONFIG['TOP_N_COINS'],
-            page=1
+            page=1,
+            price_change_percentage='1h,24h'  # Ask for 1-hour and 24-hour change
         )
-        coin_ids = [coin['id'] for coin in markets]
+        print(f"Fetched market data for {len(markets)} coins.")
 
-        # 2. Get the simple price for all these coins in one API call
-        # We request the 1-hour percentage change, which is key for this scanner
-        price_data = cg.get_price(
-            ids=coin_ids,
-            vs_currencies='usd',
-            include_market_cap='true',
-            include_24hr_vol='true',
-            include_24hr_change='true',
-            include_last_updated_at='true',
-            precision=8,
-            include_1h_change='true' # This is the crucial part for our check
-        )
+        # The data is now a LIST of dictionaries, so we loop differently
+        for coin in markets:
+            coin_id = coin.get('id')
+            # The key for 1h change is 'price_change_percentage_1h_in_currency'
+            change_1h = coin.get('price_change_percentage_1h_in_currency')
 
-        alert_channel = bot.get_channel(CONFIG['ALERT_CHANNEL_ID'])
-        if not alert_channel:
-            print(f"ERROR: Channel with ID {CONFIG['ALERT_CHANNEL_ID']} not found. Halting check.")
-            return
+            if coin_id is None or change_1h is None:
+                continue 
 
-        # 3. Iterate through each coin and check for significant movement
-        for coin_id, data in price_data.items():
-            change_1h = data.get('usd_1h_change')
+            print(f"  - Checking {coin_id.ljust(15)} | 1h Change: {change_1h:.4f}% | Threshold: {CONFIG['PRICE_CHANGE_THRESHOLD']}%")
 
-            if change_1h is None:
-                continue # Skip if data is not available
-
-            # Check if the coin is currently on cooldown
+            # Check if cooldown is active
             if coin_id in recent_alerts:
                 cooldown_time = datetime.timedelta(hours=CONFIG['ALERT_COOLDOWN_HOURS'])
-                if datetime.datetime.utcnow() - recent_alerts[coin_id] < cooldown_time:
-                    continue # Still on cooldown, skip to the next coin
+                if datetime.datetime.utcnow() - recent_alerts.get(coin_id, datetime.datetime.min) < cooldown_time:
+                    continue 
 
-            # 4. Check if the movement exceeds our threshold
+            # Check if movement exceeds threshold
             if abs(change_1h) >= CONFIG['PRICE_CHANGE_THRESHOLD']:
-                print(f"!!! Significant movement detected for {coin_id}: {change_1h:.2f}%")
+                print(f"  ✅✅✅ ALERT TRIGGERED FOR {coin_id.upper()} ✅✅✅")
                 
-                # Update the cooldown timer for this coin immediately
                 recent_alerts[coin_id] = datetime.datetime.utcnow()
                 
-                # 5. Create and send the alert embed
+                # We get the other data points from the 'coin' dictionary
                 embed = create_movement_embed(
                     coin_id=coin_id,
-                    price=data.get('usd', 0),
+                    price=coin.get('current_price', 0),
                     change_1h=change_1h,
-                    change_24h=data.get('usd_24h_change', 0),
-                    market_cap=data.get('usd_market_cap', 0)
+                    change_24h=coin.get('price_change_percentage_24h_in_currency', 0),
+                    market_cap=coin.get('market_cap', 0)
                 )
+                
+                print(f"      Attempting to send message to #{alert_channel.name}...")
                 await alert_channel.send(embed=embed)
+                print(f"      Message for {coin_id.upper()} sent successfully!")
 
     except Exception as e:
-        print(f"An error occurred in the check_price_movements loop: {e}")
-
+        print(f"!!! AN UNEXPECTED ERROR OCCURRED in the loop: {e}")
 def create_movement_embed(coin_id, price, change_1h, change_24h, market_cap):
     """A helper function to create a nice-looking Discord embed for an alert."""
     is_positive = change_1h >= 0

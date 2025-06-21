@@ -22,7 +22,7 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:
         return
-
+    
     await bot.process_commands(message)
 
 

@@ -3,7 +3,7 @@ import json
 
 # This script simulates sending a request for the bot to receive. This can be deleted after TradingView webhooks are implemented.
 
-url = "http://127.0.0.1:8000/webhook"
+url = "https://trading-view-bot-0s4c.onrender.com/webhook"
 
 data = {'crypto': 'bitcoin', 'price':50000}
 

@@ -19,8 +19,8 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     if request.method == 'POST':
-        print(request.json)
-        asyncio.run_coroutine_threadsafe(q.put(request.json), bot.loop)
+        print(request.get_data(as_text=True))
+        asyncio.run_coroutine_threadsafe(q.put(request.get_data(as_text=True)), bot.loop)
         return 'success', 200
     else:
         abort(400)

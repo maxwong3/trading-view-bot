@@ -94,7 +94,7 @@ async def help(ctx):
 
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
     embed.add_field(name="REQUIRED JSON FIELDS:",value="server_id, ticker, alert", inline=False)
-    embed.add_field(name="Other commands:", value="!setchannel, !alerts, !setprefix", inline=False)
+    embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
     embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
     await ctx.send(embed=embed)

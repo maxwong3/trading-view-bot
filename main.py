@@ -7,7 +7,6 @@ from discord.ext import commands
 import logging
 from dotenv import load_dotenv
 import os
-import webserver
 
 q = asyncio.Queue()
 
@@ -75,6 +74,6 @@ async def alert_request():
             await channel.send(f'New alert: {alert}')
         q.task_done()
 
-webserver.keep_alive()
+keep_alive()
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

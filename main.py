@@ -136,17 +136,15 @@ async def alert_request():
                         if 'time' in alert:
                             embed.add_field(name="Time", value=alert['time'], inline=True)
                         if 'interval' in alert:
-                            embed.add_field(name="Interval", value=alert['interval'], inline=True)
-                        if 'open' in alert:
-                            embed.add_field(name="", inline=False)
-                            embed.add_field(name="Open", value=alert['open'], inline=True)
-                        if 'close' in alert:
-                            embed.add_field(name="Close", value=alert['close'], inline=True)
+                            embed.add_field(name="Interval", value=alert['interval'], inline=False)
                         if 'high' in alert:
-                            embed.add_field(name="", inline=False)
                             embed.add_field(name="High", value=alert['high'], inline=True)
                         if 'low' in alert:
                             embed.add_field(name="Low", value=alert['low'], inline=True)
+                        if 'open' in alert:
+                            embed.add_field(name="Open", value=alert['open'], inline=True)
+                        if 'close' in alert:
+                            embed.add_field(name="Close", value=alert['close'], inline=True)
 
                         embed.set_footer(text="Data powered with TradingView")
 

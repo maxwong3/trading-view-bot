@@ -21,7 +21,7 @@ def home():
 def webhook():
     if request.method == 'POST':
         if request.content_type != 'application/json':
-            asyncio.run_coroutine_threadsafe(q.put(request.json), bot.loop)
+            asyncio.run_coroutine_threadsafe(q.put(request.get_json(force=True)), bot.loop)
         else:
             asyncio.run_coroutine_threadsafe(q.put(request.get_data(as_text=True)), bot.loop)
         return 'success', 200

@@ -43,15 +43,12 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-channel_id = 1385734799955722240
-
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
+channel = None
 
 @bot.event
 async def on_ready():
-    global channel
-    channel = bot.get_channel(channel_id)
     print(f"We are ready to go in, {bot.user.name}")
     if channel is None:
         print("Channel not found.")
@@ -80,7 +77,7 @@ async def help(ctx):
     json = '''```json
 {
   "ticker": "{{ticker}}",
-  "alert": "Moving down 1000 in the last day",
+  "alert": "Enter desired alert message here: e.g. "BUY NOW!" ",
   "time": "{{time}}",
   "open": "{{open}}",
   "close": "{{close}}",
@@ -95,6 +92,11 @@ async def help(ctx):
     embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
     await ctx.send(embed=embed)
+
+@bot.command()
+async def setchannel(ctx):
+    ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
+    channel = ctx.channel
 
 async def alert_request():
     while True:

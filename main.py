@@ -119,6 +119,7 @@ async def alert_request():
                 embed = Embed(
                     title=f"🚨 Alert: {alert['ticker']}",
                     description=f"{alert['alert']}",
+                    color=0x00b05e
                 )
                 
                 embed.add_field(name="Exchange", value=alert['exchange'], inline=True)

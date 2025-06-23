@@ -20,7 +20,7 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     if request.method == 'POST':
-        if request.content_type != 'application/json':
+        if request.content_type == 'application/json':
             asyncio.run_coroutine_threadsafe(q.put(request.get_json(force=True)), bot.loop)
         else:
             asyncio.run_coroutine_threadsafe(q.put(request.get_data(as_text=True)), bot.loop)
@@ -44,6 +44,8 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+
+channel = None
 
 @bot.event
 async def on_ready():
@@ -91,11 +93,13 @@ async def help(ctx):
 
     await ctx.send(embed=embed)
 
+
+
 @bot.command()
 async def setchannel(ctx):
-    await ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
     global channel
     channel = ctx.channel
+    await ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
 
 async def alert_request():
     while True:

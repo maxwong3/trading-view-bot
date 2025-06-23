@@ -48,7 +48,9 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 channel = None
+discord_server = None
 alerts_toggled = True
+alert_channels = {}
 
 @bot.event
 async def on_ready():
@@ -77,7 +79,8 @@ async def help(ctx):
 {
   "ticker": "{{ticker}}",
   "alert": "Enter desired alert message here: e.g. BUY NOW! ",
-  "time": "{{time}}",
+  "server_id": Your Discord server ID (e.g. 814304078158364750)
+  "time": "{{time}}" ,
   "open": "{{open}}",
   "close": "{{close}}",
   "high": "{{high}}",
@@ -88,6 +91,7 @@ async def help(ctx):
 ```'''
 
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
+    embed.add_field(value="**ticker, alert, server_id is required**", inline=False)
     embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
     embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
@@ -97,8 +101,7 @@ async def help(ctx):
 
 @bot.command()
 async def setchannel(ctx):
-    global channel
-    channel = ctx.channel
+    alert_channels[ctx.guild.id] = ctx.channel
     await ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
 
 @bot.command()
@@ -114,29 +117,49 @@ async def alerts(ctx):
 async def alert_request():
     while True:
         alert = await q.get()
-        if channel and alerts_toggled == True:
+
+        if alerts_toggled == True:
             if isinstance(alert, dict):
-                embed = Embed(
-                    title=f"🚨 Alert: {alert['ticker']}",
-                    description=f"{alert['alert']}",
-                    color=0x00b05e
-                )
-                
-                embed.add_field(name="Exchange", value=alert['exchange'], inline=True)
-                embed.add_field(name="Time", value=alert['time'], inline=True)
-                embed.add_field(name="Interval", value=alert['interval'], inline=True)
-                embed.add_field(name="Open", value=alert['open'], inline=False)
-                embed.add_field(name="Close", value=alert['close'], inline=True)
-                embed.add_field(name="High", value=alert['high'], inline=False)
-                embed.add_field(name="Low", value=alert['low'], inline=True)
+                if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
+                    server_id = int(alert['server_id'])
 
-                embed.set_footer(text="Data powered with TradingView")
+                    if server_id in alert_channels:
+                        channel = alert_channels[server_id]
 
-                await channel.send(embed=embed)
+                        embed = Embed(
+                            title=f"🚨 Alert: {alert['ticker']}",
+                            description=f"{alert['alert']}",
+                            color=0x00b05e
+                        )
+                        if 'exchange' in alert:
+                            embed.add_field(name="Exchange", value=alert['exchange'], inline=True)
+                        if 'time' in alert:
+                            embed.add_field(name="Time", value=alert['time'], inline=True)
+                        if 'interval' in alert:
+                            embed.add_field(name="Interval", value=alert['interval'], inline=True)
+                        if 'open' in alert:
+                            embed.add_field(name="\u200b", value="\u200b", inline=False)
+                            embed.add_field(name="Open", value=alert['open'], inline=True)
+                        if 'close' in alert:
+                            embed.add_field(name="Close", value=alert['close'], inline=True)
+                        if 'high' in alert:
+                            embed.add_field(name="\u200b", value="\u200b", inline=False)
+                            embed.add_field(name="High", value=alert['high'], inline=True)
+                        if 'low' in alert:
+                            embed.add_field(name="Low", value=alert['low'], inline=True)
+
+                        embed.set_footer(text="Data powered with TradingView")
+
+                        await channel.send(embed=embed)
+                else:
+                    await channel.send("ERROR: One of server_id, ticker, or alert (required) not found as key in json")
             else:
+                if server_id in alert_channels:
+                    channel = alert_channels[server_id]
                 await channel.send(f'New alert: {alert}')
         q.task_done()
 
 keep_alive()
+
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

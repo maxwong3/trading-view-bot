@@ -132,11 +132,11 @@ async def alert_request():
                             color=0x00b05e
                         )
                         if 'exchange' in alert:
-                            embed.add_field(name="Exchange", value=alert['exchange'], inline=True)
+                            embed.add_field(name="Exchange", value=alert['exchange'], inline=False)
                         if 'time' in alert:
-                            embed.add_field(name="Time", value=alert['time'], inline=True)
+                            embed.add_field(name="Time", value=alert['time'], inline=False)
                         if 'interval' in alert:
-                            embed.add_field(name="Interval", value=alert['interval'], inline=False)
+                            embed.add_field(name="Interval", value=alert['interval'], inline=True)
                         if 'high' in alert:
                             embed.add_field(name="High", value=alert['high'], inline=True)
                         if 'low' in alert:

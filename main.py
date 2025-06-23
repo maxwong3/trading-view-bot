@@ -45,7 +45,7 @@ intents.members = True
 
 channel_id = 1385734799955722240
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 
 @bot.event
@@ -70,6 +70,32 @@ async def on_message(message):
 async def hello(ctx):
     await ctx.send(f"Hello {ctx.author.mention}")
 
+@bot.command()
+async def help(ctx):
+    embed = Embed(
+        title="Sending alerts with TradingView",
+        description="Send alerts to webhook URL: https://trading-view-bot-0s4c.onrender.com/webhook"
+    )
+
+    json = '''```json
+{
+  "ticker": "{{ticker}}",
+  "alert": "Moving down 1000 in the last day",
+  "time": "{{time}}",
+  "open": "{{open}}",
+  "close": "{{close}}",
+  "high": "{{high}}",
+  "low": "{{low}}",
+  "interval": "{{interval}}",
+  "exchange": "{{exchange}}"
+}
+```'''
+
+    embed.add_field(name="Structure the alert message as a json like this (recommended)", value=json)
+    embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
+
+    await ctx.send(embed=embed)
+
 async def alert_request():
     while True:
         alert = await q.get()
@@ -77,10 +103,11 @@ async def alert_request():
             if isinstance(alert, dict):
                 embed = Embed(
                     title=f"🚨 Alert: {alert['ticker']}",
-                    description=f"Time: {alert['time']}",
+                    description=f"{alert['alert']}",
                 )
-
+                
                 embed.add_field(name="Exchange", value=alert['exchange'], inline=True)
+                embed.add_field(name="Time", value=alert['time'], inline=True)
                 embed.add_field(name="Interval", value=alert['interval'], inline=True)
                 embed.add_field(name="Open", value=alert['open'], inline=True)
                 embed.add_field(name="Close", value=alert['close'], inline=True)

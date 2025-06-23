@@ -74,7 +74,7 @@ async def alert_request():
     while True:
         alert = await q.get()
         if channel:
-            if q.content_type == 'application/json':
+            if isinstance(alert, dict):
                 embed = Embed(
                     title=f"🚨 Alert: {alert['ticker']}",
                     description=f"Time: {alert['time']}",

@@ -4,6 +4,7 @@ import asyncio
 
 import discord
 from discord.ext import commands
+from discord import Embed
 import logging
 from dotenv import load_dotenv
 import os
@@ -19,8 +20,10 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     if request.method == 'POST':
-        print(request.get_data(as_text=True))
-        asyncio.run_coroutine_threadsafe(q.put(request.get_data(as_text=True)), bot.loop)
+        if request.content_type != 'application/json':
+            asyncio.run_coroutine_threadsafe(q.put(request.json), bot.loop)
+        else:
+            asyncio.run_coroutine_threadsafe(q.put(request.get_data(as_text=True)), bot.loop)
         return 'success', 200
     else:
         abort(400)
@@ -71,7 +74,24 @@ async def alert_request():
     while True:
         alert = await q.get()
         if channel:
-            await channel.send(f'New alert: {alert}')
+            if q.content_type == 'application/json':
+                embed = Embed(
+                    title=f"🚨 Alert: {alert['ticker']}",
+                    description=f"Time: {alert['time']}",
+                )
+
+                embed.add_field(name="Exchange", value=alert['exchange'], inline=True)
+                embed.add_field(name="Interval", value=alert['interval'], inline=True)
+                embed.add_field(name="Open", value=alert['open'], inline=True)
+                embed.add_field(name="Close", value=alert['close'], inline=True)
+                embed.add_field(name="High", value=alert['high'], inline=True)
+                embed.add_field(name="Low", value=alert['low'], inline=True)
+
+                embed.set_footer(text="Data powered with TradingView")
+
+                await channel.send(embed=embed)
+            else:
+                await channel.send(f'New alert: {alert}')
         q.task_done()
 
 keep_alive()

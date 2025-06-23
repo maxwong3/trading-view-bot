@@ -50,11 +50,7 @@ channel = None
 @bot.event
 async def on_ready():
     print(f"We are ready to go in, {bot.user.name}")
-    if channel is None:
-        print("Channel not found.")
-    else:
-        print(f"Ready to send messages to #{channel.name}")
-        bot.loop.create_task(alert_request())
+    bot.loop.create_task(alert_request())
 
 @bot.event
 async def on_message(message):

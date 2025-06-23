@@ -149,36 +149,37 @@ async def alert_request():
         if isinstance(alert, dict):
             if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
                 server_id = str(alert['server_id'])
-                if alerts_toggled[str(server_id)] == True:
+                if alerts_toggled.get(server_id, False):
                     if server_id in alert_channels:
-                        channel_id = alerts_toggled[server_id]
+                        channel_id = alert_channels[server_id]
                         channel = bot.get_channel(channel_id)
 
-                        embed = Embed(
-                            title=f"🚨 Alert: {alert['ticker']}",
-                            description=f"{alert['alert']}",
-                            color=0x00b05e
-                        )
-                        if 'exchange' in alert:
-                            embed.add_field(name="Exchange", value=alert['exchange'], inline=False)
-                        if 'time' in alert:
-                            embed.add_field(name="Time", value=alert['time'], inline=False)
-                        if 'interval' in alert:
-                            embed.add_field(name="Interval", value=alert['interval'], inline=True)
-                        if 'high' in alert:
-                            embed.add_field(name="High", value=alert['high'], inline=True)
-                        if 'low' in alert:
-                            embed.add_field(name="Low", value=alert['low'], inline=True)
-                        if 'open' in alert:
-                            embed.add_field(name="Open", value=alert['open'], inline=True)
-                        if 'close' in alert:
-                            embed.add_field(name="Close", value=alert['close'], inline=True)
+                        if channel: 
+                            embed = Embed(
+                                title=f"🚨 Alert: {alert['ticker']}",
+                                description=f"{alert['alert']}",
+                                color=0x00b05e
+                            )
+                            if 'exchange' in alert:
+                                embed.add_field(name="Exchange", value=alert['exchange'], inline=False)
+                            if 'time' in alert:
+                                embed.add_field(name="Time", value=alert['time'], inline=False)
+                            if 'interval' in alert:
+                                embed.add_field(name="Interval", value=alert['interval'], inline=True)
+                            if 'high' in alert:
+                                embed.add_field(name="High", value=alert['high'], inline=True)
+                            if 'low' in alert:
+                                embed.add_field(name="Low", value=alert['low'], inline=True)
+                            if 'open' in alert:
+                                embed.add_field(name="Open", value=alert['open'], inline=True)
+                            if 'close' in alert:
+                                embed.add_field(name="Close", value=alert['close'], inline=True)
 
-                        embed.set_footer(text="Data powered with TradingView")
+                            embed.set_footer(text="Data powered with TradingView")
 
-                        await channel.send(embed=embed)
+                            await channel.send(embed=embed)
             else:
-                await channel.send("ERROR: One of server_id, ticker, or alert (required) not found as key in json")
+                print("ERROR: One of server_id, ticker, or alert (required) not found as key in json")
         q.task_done()
 
 keep_alive()

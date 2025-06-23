@@ -8,6 +8,7 @@ from discord import Embed
 import logging
 from dotenv import load_dotenv
 import os
+import json
 
 q = asyncio.Queue()
 
@@ -34,6 +35,20 @@ def run_flask():
     if __name__ == "__main__":
         app.run(host="0.0.0.0", port=80)
 
+
+# json setup
+def load_json(filename):
+    if os.path.exists(filename):
+        with open(filename, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_json(filename, data):
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=4)
+
+
+
 def keep_alive():
     threading.Thread(target=run_flask).start()
 
@@ -50,8 +65,8 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 channel = None
 discord_server = None
 # dict that maps server id to channel that's set to the alert channel in that server
-alert_channels = {}
-alerts_toggled = {}
+alert_channels = load_json('./json/alert_channels.json')
+alerts_toggled = load_json('./json/alerts_toggled.json')
 command_prefix = {}
 
 @bot.event
@@ -95,7 +110,6 @@ async def help(ctx):
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
     embed.add_field(name="REQUIRED JSON FIELDS:",value="server_id, ticker, alert", inline=False)
     embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
-    embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
     await ctx.send(embed=embed)
 
@@ -103,22 +117,27 @@ async def help(ctx):
 
 @bot.command()
 async def setchannel(ctx):
-    alert_channels[ctx.guild.id] = ctx.channel
+    alert_channels[str(ctx.guild.id)] = ctx.channel.id
+    save_json('./json/alert_channels.json', alert_channels)
+
     await ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
-    if ctx.guild.id not in alerts_toggled:
-        alerts_toggled[ctx.guild.id] = True
+    if str(ctx.guild.id) not in alerts_toggled:
+        alerts_toggled[str(ctx.guild.id)] = True
+        save_json('./json/alerts_toggled.json', alerts_toggled)
 
 @bot.command()
 async def alerts(ctx):
-    if ctx.guild.id in alerts_toggled:
-        if alerts_toggled[ctx.guild.id] == True:
+    if str(ctx.guild.id) in alerts_toggled:
+        if alerts_toggled[str(ctx.guild.id)] == True:
             await ctx.send("Alerts have been turned OFF.")
-            alerts_toggled[ctx.guild.id] = False
-        elif alerts_toggled[ctx.guild.id] == False:
+            alerts_toggled[str(ctx.guild.id)] = False
+            save_json('./json/alerts_toggled.json', alerts_toggled)
+        elif alerts_toggled[str(ctx.guild.id)] == False:
             await ctx.send("Alerts have been turned ON.")
-            alerts_toggled[ctx.guild.id] = True
+            alerts_toggled[str(ctx.guild.id)] = True
+            save_json('./json/alerts_toggled.json', alerts_toggled)
     else: 
-        await ctx.send("Alerts are switched off, do !setchannel to turn them on again")
+        await ctx.send("Alerts are switched off, do !setchannel in this server first")
 
 @bot.command()
 async def setprefix(ctx):
@@ -127,14 +146,13 @@ async def setprefix(ctx):
 async def alert_request():
     while True:
         alert = await q.get()
-
-        if alerts_toggled == True:
-            if isinstance(alert, dict):
-                if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
-                    server_id = int(alert['server_id'])
-
+        if isinstance(alert, dict):
+            if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
+                server_id = str(alert['server_id'])
+                if alerts_toggled[str(server_id)] == True:
                     if server_id in alert_channels:
-                        channel = alert_channels[server_id]
+                        channel_id = alerts_toggled[server_id]
+                        channel = bot.get_channel(channel_id)
 
                         embed = Embed(
                             title=f"🚨 Alert: {alert['ticker']}",
@@ -159,12 +177,8 @@ async def alert_request():
                         embed.set_footer(text="Data powered with TradingView")
 
                         await channel.send(embed=embed)
-                else:
-                    await channel.send("ERROR: One of server_id, ticker, or alert (required) not found as key in json")
             else:
-                if server_id in alert_channels:
-                    channel = alert_channels[server_id]
-                await channel.send(f'New alert: {alert}')
+                await channel.send("ERROR: One of server_id, ticker, or alert (required) not found as key in json")
         q.task_done()
 
 keep_alive()

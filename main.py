@@ -7,10 +7,15 @@ from discord.ext import commands
 import logging
 from dotenv import load_dotenv
 import os
+import webserver
 
 q = asyncio.Queue()
 
 app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return 'Running'
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -23,9 +28,10 @@ def webhook():
 
 def run_flask():
     if __name__ == "__main__":
-        app.run()
+        app.run(host="0.0.0.0", port=8080)
 
-threading.Thread(target=run_flask).start()
+def keep_alive():
+    threading.Thread(target=run_flask).start()
 
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
@@ -69,6 +75,6 @@ async def alert_request():
             await channel.send(f'New alert: {alert}')
         q.task_done()
 
-
+webserver.keep_alive()
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

@@ -87,8 +87,8 @@ async def help(ctx):
 }
 ```'''
 
-    embed.add_field(name="Structure the alert message as a json like this", value=json)
-    embed.add_field(name="Other commands:", value="!setchannel, !alerts")
+    embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
+    embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
     embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
     await ctx.send(embed=embed)
@@ -124,9 +124,9 @@ async def alert_request():
                 embed.add_field(name="Exchange", value=alert['exchange'], inline=True)
                 embed.add_field(name="Time", value=alert['time'], inline=True)
                 embed.add_field(name="Interval", value=alert['interval'], inline=True)
-                embed.add_field(name="Open", value=alert['open'], inline=True)
+                embed.add_field(name="Open", value=alert['open'], inline=False)
                 embed.add_field(name="Close", value=alert['close'], inline=True)
-                embed.add_field(name="High", value=alert['high'], inline=True)
+                embed.add_field(name="High", value=alert['high'], inline=False)
                 embed.add_field(name="Low", value=alert['low'], inline=True)
 
                 embed.set_footer(text="Data powered with TradingView")

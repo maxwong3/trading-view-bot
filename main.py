@@ -102,6 +102,7 @@ async def setchannel(ctx):
 
 @bot.command()
 async def alerts(ctx):
+    global alerts
     if alerts == True:
         await ctx.send("Alerts have been turned OFF.")
         alerts = False

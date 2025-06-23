@@ -62,7 +62,7 @@ intents.members = True
 
 prefix = '!'
 
-bot = commands.Bot(command_prefix=get_prefix, intents=intents, help_command=None)
+bot = commands.Bot(command_prefix=prefix, intents=intents, help_command=None)
 
 # set default channel (crypt0nest discord server default when you have it)
 #

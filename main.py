@@ -114,7 +114,7 @@ async def alerts(ctx):
 async def alert_request():
     while True:
         alert = await q.get()
-        if channel and alerts == True:
+        if channel and alerts_toggled == True:
             if isinstance(alert, dict):
                 embed = Embed(
                     title=f"🚨 Alert: {alert['ticker']}",

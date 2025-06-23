@@ -48,7 +48,7 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 channel = None
-alerts = True
+alerts_toggled = True
 
 @bot.event
 async def on_ready():
@@ -88,6 +88,7 @@ async def help(ctx):
 ```'''
 
     embed.add_field(name="Structure the alert message as a json like this", value=json)
+    embed.add_field(name="Other commands:", value="!setchannel, !alerts")
     embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
     await ctx.send(embed=embed)
@@ -101,14 +102,14 @@ async def setchannel(ctx):
     await ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
 
 @bot.command()
-async def alert(ctx):
-    global alerts
-    if alerts == True:
+async def alerts(ctx):
+    global alerts_toggled
+    if alerts_toggled == True:
         await ctx.send("Alerts have been turned OFF.")
-        alerts = False
-    elif alerts == False:
+        alerts_toggled = False
+    elif alerts_toggled == False:
         await ctx.send("Alerts have been turned ON.")
-        alerts = True
+        alerts_toggled = True
 
 async def alert_request():
     while True:

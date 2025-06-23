@@ -45,8 +45,6 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
-channel = None
-
 @bot.event
 async def on_ready():
     print(f"We are ready to go in, {bot.user.name}")
@@ -95,7 +93,8 @@ async def help(ctx):
 
 @bot.command()
 async def setchannel(ctx):
-    ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
+    await ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
+    global channel
     channel = ctx.channel
 
 async def alert_request():

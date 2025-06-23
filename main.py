@@ -48,6 +48,7 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 channel = None
+alerts = True
 
 @bot.event
 async def on_ready():
@@ -75,7 +76,7 @@ async def help(ctx):
     json = '''```json
 {
   "ticker": "{{ticker}}",
-  "alert": "Enter desired alert message here: e.g. "BUY NOW!" ",
+  "alert": "Enter desired alert message here: e.g. BUY NOW! ",
   "time": "{{time}}",
   "open": "{{open}}",
   "close": "{{close}}",
@@ -86,7 +87,7 @@ async def help(ctx):
 }
 ```'''
 
-    embed.add_field(name="Structure the alert message as a json like this (recommended)", value=json)
+    embed.add_field(name="Structure the alert message as a json like this", value=json)
     embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
     await ctx.send(embed=embed)
@@ -99,10 +100,19 @@ async def setchannel(ctx):
     channel = ctx.channel
     await ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
 
+@bot.command()
+async def alerts(ctx):
+    if alerts == True:
+        await ctx.send("Alerts have been turned OFF.")
+        alerts = False
+    if alerts == False:
+        await ctx.send("Alerts have been turned ON.")
+        alerts = True
+
 async def alert_request():
     while True:
         alert = await q.get()
-        if channel:
+        if channel and alerts == True:
             if isinstance(alert, dict):
                 embed = Embed(
                     title=f"🚨 Alert: {alert['ticker']}",

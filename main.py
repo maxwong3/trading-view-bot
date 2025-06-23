@@ -91,7 +91,7 @@ async def help(ctx):
 ```'''
 
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
-    embed.add_field(value="**ticker, alert, server_id is required**", inline=False)
+    embed.add_field(name="**ticker, alert, server_id is required**", inline=False)
     embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
     embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
@@ -138,12 +138,12 @@ async def alert_request():
                         if 'interval' in alert:
                             embed.add_field(name="Interval", value=alert['interval'], inline=True)
                         if 'open' in alert:
-                            embed.add_field(name="\u200b", value="\u200b", inline=False)
+                            embed.add_field(name="", inline=False)
                             embed.add_field(name="Open", value=alert['open'], inline=True)
                         if 'close' in alert:
                             embed.add_field(name="Close", value=alert['close'], inline=True)
                         if 'high' in alert:
-                            embed.add_field(name="\u200b", value="\u200b", inline=False)
+                            embed.add_field(name="", inline=False)
                             embed.add_field(name="High", value=alert['high'], inline=True)
                         if 'low' in alert:
                             embed.add_field(name="Low", value=alert['low'], inline=True)

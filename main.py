@@ -125,11 +125,11 @@ async def help(ctx):
 async def setchannel(ctx):
     global channel
     channel = ctx.channel
-
-    await ctx.send("Alerts will now be sent here in #" + channel)
+    await ctx.send("Alerts will now be sent here in #" + channel.name)
 
 @bot.command()
 async def alerts(ctx):
+    global alerts_on
     if alerts_on == True:
         alerts_on = False
         await ctx.send("Alerts have been turned OFF.")

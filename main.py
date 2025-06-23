@@ -60,7 +60,9 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+prefix = '!'
+
+bot = commands.Bot(command_prefix=get_prefix, intents=intents, help_command=None)
 
 # set default channel (crypt0nest discord server default when you have it)
 #
@@ -72,9 +74,11 @@ channel = None
 alerts_on = True
 discord_server = None
 # dict that maps server id to channel that's set to the alert channel in that server
-alert_channels = load_json('./json/alert_channels.json')
+
+# Below is for the bot to be functional across servers; not implemented currently
+'''alert_channels = load_json('./json/alert_channels.json')
 alerts_toggled = load_json('./json/alerts_toggled.json')
-command_prefix = {}
+command_prefix = {}'''
 
 @bot.event
 async def on_ready():
@@ -103,6 +107,7 @@ async def help(ctx):
 {
   "ticker": "{{ticker}}",
   "alert": "Enter desired alert message here: e.g. BUY NOW! ",
+  "server_id": Your Discord server ID (e.g. 814304078158364750)
   "time": "{{time}}" ,
   "open": "{{open}}",
   "close": "{{close}}",
@@ -114,7 +119,7 @@ async def help(ctx):
 ```'''
 
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
-    embed.add_field(name="REQUIRED JSON FIELDS:",value="ticker, alert", inline=False)
+    embed.add_field(name="REQUIRED JSON FIELDS:",value="ticker, alert, server_id", inline=False)
     embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
 
     await ctx.send(embed=embed)
@@ -138,8 +143,11 @@ async def alerts(ctx):
         await ctx.send("Alerts have been turned ON.")
 
 @bot.command()
-async def setprefix(ctx):
-    await ctx.send("Not implemented yet; Will be developed if needed.")
+async def setprefix(ctx, new_prefix):
+    global prefix
+    prefix = new_prefix
+    await ctx.send("Prefix set to " + prefix + ".")
+
 
 async def alert_request():
     while True:

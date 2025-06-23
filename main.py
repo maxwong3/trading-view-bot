@@ -133,7 +133,7 @@ async def alerts(ctx):
     if alerts_on == True:
         alerts_on = False
         await ctx.send("Alerts have been turned OFF.")
-    if alerts_on == False:
+    elif alerts_on == False:
         alerts_on = True
         await ctx.send("Alerts have been turned ON.")
 

@@ -49,8 +49,10 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 channel = None
 discord_server = None
-alerts_toggled = True
+# dict that maps server id to channel that's set to the alert channel in that server
 alert_channels = {}
+alerts_toggled = {}
+command_prefix = {}
 
 @bot.event
 async def on_ready():
@@ -92,7 +94,7 @@ async def help(ctx):
 
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
     embed.add_field(name="REQUIRED JSON FIELDS:",value="server_id, ticker, alert", inline=False)
-    embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
+    embed.add_field(name="Other commands:", value="!setchannel, !alerts, !setprefix", inline=False)
     embed.set_footer(text="*Messages not sent as a json will be sent as raw text in specified channel*")
 
     await ctx.send(embed=embed)
@@ -103,16 +105,24 @@ async def help(ctx):
 async def setchannel(ctx):
     alert_channels[ctx.guild.id] = ctx.channel
     await ctx.send("Alerts will now be sent here in #" + ctx.channel.name)
+    if ctx.guild.id not in alerts_toggled:
+        alerts_toggled[ctx.guild.id] = True
 
 @bot.command()
 async def alerts(ctx):
-    global alerts_toggled
-    if alerts_toggled == True:
-        await ctx.send("Alerts have been turned OFF.")
-        alerts_toggled = False
-    elif alerts_toggled == False:
-        await ctx.send("Alerts have been turned ON.")
-        alerts_toggled = True
+    if ctx.guild.id in alerts_toggled:
+        if alerts_toggled[ctx.guild.id] == True:
+            await ctx.send("Alerts have been turned OFF.")
+            alerts_toggled[ctx.guild.id] = False
+        elif alerts_toggled[ctx.guild.id] == False:
+            await ctx.send("Alerts have been turned ON.")
+            alerts_toggled[ctx.guild.id] = True
+    else: 
+        await ctx.send("Alerts are switched off, do !setchannel to turn them on again")
+
+@bot.command()
+async def setprefix(ctx):
+    await ctx.send("Not implemented yet; Will be developed if needed.")
 
 async def alert_request():
     while True:

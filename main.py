@@ -35,7 +35,7 @@ PORT = int(os.getenv('PORT'))
 
 def run_flask():
     if __name__ == "__main__":
-        app.run(debug=True, host="0.0.0.0", port=PORT)
+        app.run(host="0.0.0.0", port=PORT)
 
 
 # json setup

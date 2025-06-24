@@ -31,7 +31,7 @@ def webhook():
     else:
         abort(400)
 
-PORT = os.getenv('PORT')
+PORT = int(os.getenv('PORT'))
 
 def run_flask():
     if __name__ == "__main__":

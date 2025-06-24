@@ -34,8 +34,7 @@ def webhook():
 PORT = int(os.getenv('PORT'))
 
 def run_flask():
-    if __name__ == "__main__":
-        app.run(host="0.0.0.0", port=PORT)
+    app.run(host="0.0.0.0", port=PORT)
 
 
 # json setup
@@ -48,7 +47,6 @@ def load_json(filename):
 def save_json(filename, data):
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
-
 
 
 def keep_alive():

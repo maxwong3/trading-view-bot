@@ -1,7 +1,6 @@
 from flask import Flask, request, abort
 import threading
 import asyncio
-
 import discord
 from discord.ext import commands
 from discord import Embed
@@ -31,10 +30,9 @@ def webhook():
     else:
         abort(400)
 
-PORT = int(os.getenv('PORT'))
-
 def run_flask():
-    app.run(host="0.0.0.0", port=PORT)
+    if __name__ == "__main__":
+        app.run(host="0.0.0.0", port=80)
 
 
 # json setup
@@ -47,6 +45,7 @@ def load_json(filename):
 def save_json(filename, data):
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
+
 
 
 def keep_alive():
@@ -90,7 +89,7 @@ async def on_message(message):
     if message.author == bot.user:
         return
     await bot.process_commands(message)
-    
+
 
 @bot.command()
 async def hello(ctx):

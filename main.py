@@ -8,10 +8,33 @@ import logging
 from dotenv import load_dotenv
 import os
 import json
+import psycopg
 
 q = asyncio.Queue()
 
 app = Flask(__name__)
+
+conn = psycopg.connect(host="localhost", dbname="postgres", user="postgres", password="postgres", port=5432)
+cur = None
+
+# SQL helper methods
+def toggle_alerts(server_id):
+    with conn.cursor() as cur:
+        cur.execute(''' 
+                    UPDATE servers
+                    SET alerts_on = NOT alerts_on
+                    WHERE server_id = %s;
+                    ''', (server_id,))
+        conn.commit()
+        cur.execute('''
+                    SELECT alerts_on
+                    FROM servers
+                    WHERE server_id = %s;
+                    ''', (server_id,))
+        alerts_on = cur.fetchone()[0]
+    return alerts_on
+
+
 
 @app.route('/')
 def home():
@@ -19,6 +42,7 @@ def home():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    # TODO Potentially: add secret token system so not everybody who knows the server ID can just send webhooks (spam/security concern)
     if request.method == 'POST':
         asyncio.run_coroutine_threadsafe(q.put(request.get_json(force=True)), bot.loop)
         # Try to implement this (currently not working)
@@ -81,8 +105,32 @@ command_prefix = {}'''
 
 @bot.event
 async def on_ready():
+    global cur
     print(f"We are ready to go in, {bot.user.name}")
+
+    print("Connected to PostgreSQL")
+    with conn.cursor() as cur:
+        cur.execute('''--begin-sql
+                CREATE TABLE IF NOT EXISTS servers (
+                server_id BIGINT PRIMARY KEY, 
+                alerts_on BOOLEAN DEFAULT TRUE
+                );
+''')
+        conn.commit()
     bot.loop.create_task(alert_request())
+
+# When bot joins a server, add new entry to server database
+@bot.event
+async def on_guild_join(guild):
+    with conn.cursor() as cur:
+        cur.execute('''--begin-sql
+                    INSERT INTO servers (server_id, alerts_on) VALUES 
+                    (%s, TRUE)
+                    ON CONFLICT (server_id) DO NOTHING;
+                    
+''', (guild.id,))
+        conn.commit()
+    print(f"Added server {guild.id} to the database.")
 
 @bot.event
 async def on_message(message):
@@ -133,13 +181,11 @@ async def setchannel(ctx):
 
 @bot.command()
 async def alerts(ctx):
-    global alerts_on
-    if alerts_on == True:
-        alerts_on = False
-        await ctx.send("Alerts have been turned OFF.")
-    elif alerts_on == False:
-        alerts_on = True
-        await ctx.send("Alerts have been turned ON.")
+    alerts_on = toggle_alerts(ctx.guild.id)
+    if (alerts_on):
+        await ctx.send("Alerts are now turned ON.")
+    else:
+        await ctx.send("Alerts are now turned OFF.")
 
 @bot.command()
 async def setprefix(ctx, new_prefix):

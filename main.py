@@ -75,7 +75,7 @@ prefix = '!'
 bot = commands.Bot(command_prefix=prefix, intents=intents, help_command=None)
 
 channel = None
-alerts_on = True
+alerts_on = None
 discord_server = None
 
 @bot.event
@@ -156,6 +156,7 @@ async def setchannel(ctx):
 
 @bot.command()
 async def alerts(ctx):
+    global alerts
     alerts_on = toggle_alerts(ctx.guild.id)
     if (alerts_on):
         await ctx.send("Alerts are now turned ON.")

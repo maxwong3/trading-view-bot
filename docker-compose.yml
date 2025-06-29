@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:latest
+    container_name: trading-view-data
+    env_file:
+      - .env
+    ports:
+      - "5431:5432"
+    volumes:
+      - trading-view-data:/var/lib/postgresql/data
+    networks:
+      - trading-view-network
+  
+  tradingview-bot:
+    build: .
+    container_name: trading-view-bot
+    env_file:
+      - .env
+    depends_on: 
+      - db
+    ports:
+      - "80:80"
+    networks:
+      - trading-view-network
+
+networks:
+  trading-view-network:
+
+volumes:
+  trading-view-data:

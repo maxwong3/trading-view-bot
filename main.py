@@ -7,14 +7,15 @@ from discord import Embed
 import logging
 from dotenv import load_dotenv
 import os
-import json
 import psycopg
 
 q = asyncio.Queue()
 
 app = Flask(__name__)
 
-conn = psycopg.connect(host="localhost", dbname="postgres", user="postgres", password="postgres", port=5432)
+load_dotenv()
+
+conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
 cur = None
 
 # SQL helper methods
@@ -59,23 +60,9 @@ def run_flask():
         app.run(host="0.0.0.0", port=80)
 
 
-# json setup
-def load_json(filename):
-    if os.path.exists(filename):
-        with open(filename, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_json(filename, data):
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=4)
-
-
-
 def keep_alive():
     threading.Thread(target=run_flask).start()
 
-load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
@@ -87,21 +74,9 @@ prefix = '!'
 
 bot = commands.Bot(command_prefix=prefix, intents=intents, help_command=None)
 
-# set default channel (crypt0nest discord server default when you have it)
-#
-# IMPORTANNTT
-#
-#SET IT BELOW:: ---------------------------------------------------------------------------------------
-
 channel = None
 alerts_on = True
 discord_server = None
-# dict that maps server id to channel that's set to the alert channel in that server
-
-# Below is for the bot to be functional across servers; not implemented currently
-'''alert_channels = load_json('./json/alert_channels.json')
-alerts_toggled = load_json('./json/alerts_toggled.json')
-command_prefix = {}'''
 
 @bot.event
 async def on_ready():

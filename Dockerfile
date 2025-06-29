@@ -8,4 +8,6 @@ RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
 COPY . /app
 
-CMD ["python", "main.py", "--host", "0.0.0.0", "--port", "80"]
+EXPOSE 80
+
+CMD ["python", "main.py"]

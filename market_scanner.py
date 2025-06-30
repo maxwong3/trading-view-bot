@@ -23,6 +23,14 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="/", intents=intents)
 
+<<<<<<< HEAD
+=======
+bot = commands.Bot(command_prefix='/', intents=intents)
+
+# Initialize the CoinGecko API client
+#cg = CoinGeckoAPI(api_key = api_key)
+cg = CoinGeckoAPI()
+>>>>>>> 08fcf53299b831ed422c2372af5ba874653417ca
 # --- Configuration ---
 CONFIG = {
     "ALERT_CHANNEL_ID": 1385799309211078737,  # <— REPLACE WITH YOUR CHANNEL ID

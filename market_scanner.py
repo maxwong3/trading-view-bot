@@ -23,20 +23,12 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="/", intents=intents)
 
-<<<<<<< HEAD
-=======
-bot = commands.Bot(command_prefix='/', intents=intents)
-
-# Initialize the CoinGecko API client
-#cg = CoinGeckoAPI(api_key = api_key)
-cg = CoinGeckoAPI()
->>>>>>> 08fcf53299b831ed422c2372af5ba874653417ca
 # --- Configuration ---
 CONFIG = {
     "ALERT_CHANNEL_ID": 1385799309211078737,  # <— REPLACE WITH YOUR CHANNEL ID
     "TOP_N_COINS": 100,
     "PRICE_CHANGE_THRESHOLD": 7,      # % movement to trigger alert
-    "CHECK_INTERVAL_MINUTES": 3,      # how often we poll
+    "CHECK_INTERVAL_MINUTES": 30,      # how often we poll
     "ALERT_COOLDOWN_HOURS": 0.1       # time before a new alert for same coin/period
 }
 
@@ -65,7 +57,36 @@ def latestrsi(df, window = 14) -> float:
 
 
 
+#---------------------------------------------------------
+# Coin Gecko's /market_charts gives timestamps, prices, market caps and volume.
+def fetch_ohlcv(coin_id:str, days: int = 7):
+    data = cg.get_coin_market_chart_by_id(
+        coin_id,
+        vs_currency = "usd",
+        days = days
+    )
+    prices = data['prices']
+    volumes = data['total_volumes']
+    df = pd.DataFrame({
+        "time": [p[0] for p in prices],
+        "close": [p[1] for p in prices],
+        "volume": [v[1] for v in volumes],
+    })
+    df['time'] = pd.to_datetime(df['time'],unit = "ms")
 
+#Compute moving averages
+df['sma_200'] = df['prices'].rolling(window = 200).mean()
+df["ema_21"]  = df["close"].ewm(span=21,  adjust=False).mean()
+df["ema_50"]  = df["close"].ewm(span=50,  adjust=False).mean()
+df["ema_200"] = df["close"].ewm(span=200, adjust=False).mean()
+#Compute 20 day highs and lows
+df["20d_high"] = df["close"].rolling(20).max()
+df["20d_low"]  = df["close"].rolling(20).min()
+#VWAP(Culmulative)
+ df["vwap"] = (df["close"] * df["volume"]).cumsum() 
+ / df["volume"].cumsum()
+
+return df
 # ---------------------------------------------------------
 @bot.event
 async def on_ready():

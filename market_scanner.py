@@ -64,6 +64,8 @@ def fetch_ohlcv(coin_id:str, days: int = 7):
         coin_id,
         vs_currency = "usd",
         days = days
+        interval = 'hourly'
+        precision = 2
     )
     prices = data['prices']
     volumes = data['total_volumes']
@@ -73,6 +75,7 @@ def fetch_ohlcv(coin_id:str, days: int = 7):
         "volume": [v[1] for v in volumes],
     })
     df['time'] = pd.to_datetime(df['time'],unit = "ms")
+    df = df.set_index['time'].sort_index()
 
 #Compute moving averages
 df['sma_200'] = df['prices'].rolling(window = 200).mean()
@@ -83,11 +86,60 @@ df["ema_200"] = df["close"].ewm(span=200, adjust=False).mean()
 df["20d_high"] = df["close"].rolling(20).max()
 df["20d_low"]  = df["close"].rolling(20).min()
 #VWAP(Culmulative)
- df["vwap"] = (df["close"] * df["volume"]).cumsum() 
- / df["volume"].cumsum()
+ df["vwap"] = (df["close"] * df["volume"]).groupby(df.index.date).cumsum()
+ / df["volume"].groupby(df.index.date).cumsum()
 
 return df
 # ---------------------------------------------------------
+#crossing above and below helper functions
+def cross_above(series,level):
+    return((series.shift(1) <= level.shift(1)) & (series > level))
+def cross_below(series, level):
+    return((series.shift(1) >= level.shift(1)) & (series < level))
+#----------------------------------------------------------
+# Place this function definition near your other helper functions
+
+def analyze_coin_technicals(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Takes a DataFrame with 'close' and 'volume' columns
+    and returns it with all technical indicators and signals calculated.
+    """
+    # --- 1. Calculate the Indicators ---
+    # You need to add the 9-period EMA for one of your crosses
+    df["ema_9"]   = df["close"].ewm(span=9,   adjust=False).mean()
+    df["ema_21"]  = df["close"].ewm(span=21,  adjust=False).mean()
+    df["ema_50"]  = df["close"].ewm(span=50,  adjust=False).mean()
+    df["ema_200"] = df["close"].ewm(span=200, adjust=False).mean()
+    df['sma_200'] = df['close'].rolling(window=200).mean()
+
+    # Compute 20-period highs and lows (using 'period' instead of 'day' is more general)
+    df["20p_high"] = df["close"].rolling(20).max()
+    df["20p_low"]  = df["close"].rolling(20).min()
+
+    # VWAP (Cumulative) - This resets for each new day in the data
+    df["vwap"] = (df["close"] * df["volume"]).groupby(df.index.date).cumsum() / df["volume"].groupby(df.index.date).cumsum()
+
+    # --- 2. Calculate the Signals (The Crosses) ---
+    # Price Crossing Key Levels
+    df['price_above_ema200'] = cross_above(df['close'], df['ema_200'])
+    df['price_below_ema200'] = cross_below(df['close'], df['ema_200'])
+    df['cross_above_sma200'] = cross_above(df['close'], df['sma_200'])
+    df['cross_below_sma200'] = cross_below(df['close'], df['sma_200'])
+    df['cross_above_vwap']   = cross_above(df['close'], df['vwap'])
+    df['cross_below_vwap']   = cross_below(df['close'], df['vwap'])
+
+    # Higher High / Lower Low Break
+    df['20p_high_break'] = df['close'] > df['20p_high'].shift(1)
+    df['20p_low_break']  = df['close'] < df['20p_low'].shift(1)
+
+    # Trend Change via Moving Average Cross
+    df['ema9_above_ema21'] = cross_above(df['ema_9'], df['ema_21'])
+    df['ema9_below_ema21'] = cross_below(df['ema_9'], df['ema_21'])
+    df['golden_cross']    = cross_above(df['ema_50'], df['ema_200'])
+    df['death_cross']     = cross_below(df['ema_50'], df['ema_200'])
+
+    return df
+# --------------------------------------------------------
 @bot.event
 async def on_ready():
     print(f"{bot.user.name} is now running!")

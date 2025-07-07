@@ -14,6 +14,43 @@ q = asyncio.Queue()
 
 app = Flask(__name__)
 
+<<<<<<< Updated upstream
+=======
+load_dotenv()
+
+conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
+cur = None
+
+# SQL helper methods
+def toggle_alerts(server_id):
+    with conn.cursor() as cur:
+        cur.execute(''' 
+                    UPDATE servers
+                    SET alerts_on = NOT alerts_on
+                    WHERE server_id = %s;
+                    ''', (server_id,))
+        conn.commit()
+        cur.execute('''
+                    SELECT alerts_on
+                    FROM servers
+                    WHERE server_id = %s;
+                    ''', (server_id,))
+        alerts_on = cur.fetchone()[0]
+    return alerts_on
+
+def set_channel(server_id, channel_id, ticker):
+    with conn.cursor() as cur:
+        cur.execute('''
+            INSERT INTO channels (channel_id, server_id, ticker)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (server_id, ticker) DO UPDATE
+            SET channel_id = EXCLUDED.channel_id;
+        ''', (channel_id, server_id, ticker))
+        conn.commit()
+
+
+
+>>>>>>> Stashed changes
 @app.route('/')
 def home():
     return 'Running'
@@ -62,6 +99,7 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
+<<<<<<< Updated upstream
 channel = None
 discord_server = None
 # dict that maps server id to channel that's set to the alert channel in that server
@@ -69,9 +107,32 @@ alert_channels = load_json('./json/alert_channels.json')
 alerts_toggled = load_json('./json/alerts_toggled.json')
 command_prefix = {}
 
+=======
+>>>>>>> Stashed changes
 @bot.event
 async def on_ready():
     print(f"We are ready to go in, {bot.user.name}")
+<<<<<<< Updated upstream
+=======
+
+    print("Connected to PostgreSQL")
+    with conn.cursor() as cur:
+        cur.execute('''--begin-sql
+                CREATE TABLE IF NOT EXISTS servers (
+                server_id BIGINT PRIMARY KEY, 
+                alerts_on BOOLEAN DEFAULT TRUE
+                );
+''')
+        cur.execute('''--begin-sql
+                CREATE TABLE IF NOT EXISTS channels (
+                channel_id BIGINT,
+                server_id BIGINT, 
+                ticker VARCHAR(50),
+                UNIQUE (server_id, ticker)
+                );
+''')
+        conn.commit()
+>>>>>>> Stashed changes
     bot.loop.create_task(alert_request())
 
 @bot.event
@@ -116,6 +177,7 @@ async def help(ctx):
 
 
 @bot.command()
+<<<<<<< Updated upstream
 async def setchannel(ctx):
     alert_channels[str(ctx.guild.id)] = ctx.channel.id
     save_json('./json/alert_channels.json', alert_channels)
@@ -142,17 +204,124 @@ async def alerts(ctx):
 @bot.command()
 async def setprefix(ctx):
     await ctx.send("Not implemented yet; Will be developed if needed.")
+=======
+async def setchannel(ctx, ticker):
+    server_id = ctx.guild.id
+    channel_id = ctx.channel.id
+    
+    set_channel(server_id, channel_id, ticker)
+
+    await ctx.send(ticker + " alerts will now be sent here in #" + ctx.channel.name)
+
+@bot.command()
+async def alerts(ctx):
+    alerts_on = toggle_alerts(ctx.guild.id)
+    if (alerts_on):
+        await ctx.send("Alerts are now turned ON.")
+    else:
+        await ctx.send("Alerts are now turned OFF.")
+
+@bot.command()
+async def setprefix(ctx, new_prefix):
+    global prefix
+    prefix = new_prefix
+    await ctx.send("Prefix set to " + prefix + ".")
+>>>>>>> Stashed changes
 
 async def alert_request():
     while True:
         alert = await q.get()
         if isinstance(alert, dict):
+            # Validate required keys
             if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
+                server_id = alert['server_id']
+                ticker = alert['ticker']
+
+                with conn.cursor() as cur:
+                    # Check if alerts are enabled for this server
+                    cur.execute('SELECT alerts_on FROM servers WHERE server_id = %s', (server_id,))
+                    res = cur.fetchone()
+                    alerts_on = res[0] if res else False
+
+                if alerts_on:
+                    with conn.cursor() as cur:
+                        # Get channel_id for this server and ticker
+                        cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s', (server_id, ticker))
+                        result = cur.fetchone()
+
+                    if result:
+                        channel_id = result[0]
+                        channel = bot.get_channel(channel_id)
+
+                        if channel:
+                            embed = Embed(
+                                title=f"🚨 Alert: {ticker}",
+                                description=alert['alert'],
+                                color=0x00b05e
+                            )
+                            # Add optional fields
+                            for field in ['exchange', 'time', 'interval', 'high', 'low', 'open', 'close']:
+                                if field in alert:
+                                    embed.add_field(name=field.capitalize(), value=alert[field], inline=True)
+
+                            embed.set_footer(text="Data powered with TradingView")
+
+                            await channel.send(embed=embed)
+                        else:
+                            print(f"Channel ID {channel_id} not found in bot cache.")
+                    else:
+                        print(f"No channel set for server {server_id} and ticker {ticker}.")
+                else:
+                    print(f"Alerts are disabled for server {server_id}.")
+            else:
+                print("ERROR: Missing required keys (server_id, ticker, alert) in alert JSON")
+        else:
+            # Handle non-dict alerts (if needed)
+            print(f"Received non-dict alert: {alert}")
+        q.task_done()
+
+"""async def alert_request():
+    while True:
+        alert = await q.get()
+        if isinstance(alert, dict):
+            if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
+<<<<<<< Updated upstream
                 server_id = str(alert['server_id'])
                 if alerts_toggled.get(server_id, False):
                     if server_id in alert_channels:
                         channel_id = alert_channels[server_id]
                         channel = bot.get_channel(channel_id)
+=======
+                if alerts_on == True:
+                    with conn.cursor() as cur:
+                        cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s', (server_id, ticker))
+                        result = cur.fetchone()
+
+                    if result:
+                        channel_id = result[0]
+                        channel = bot.get_channel(channel_id)
+
+                    if channel: 
+                        embed = Embed(
+                            title=f"🚨 Alert: {alert['ticker']}",
+                            description=f"{alert['alert']}",
+                            color=0x00b05e
+                        )
+                        if 'exchange' in alert:
+                            embed.add_field(name="Exchange", value=alert['exchange'], inline=False)
+                        if 'time' in alert:
+                            embed.add_field(name="Time", value=alert['time'], inline=False)
+                        if 'interval' in alert:
+                            embed.add_field(name="Interval", value=alert['interval'], inline=True)
+                        if 'high' in alert:
+                            embed.add_field(name="High", value=alert['high'], inline=True)
+                        if 'low' in alert:
+                            embed.add_field(name="Low", value=alert['low'], inline=True)
+                        if 'open' in alert:
+                            embed.add_field(name="Open", value=alert['open'], inline=True)
+                        if 'close' in alert:
+                            embed.add_field(name="Close", value=alert['close'], inline=True)
+>>>>>>> Stashed changes
 
                         if channel: 
                             embed = Embed(
@@ -180,7 +349,14 @@ async def alert_request():
                             await channel.send(embed=embed)
             else:
                 print("ERROR: One of server_id, ticker, or alert (required) not found as key in json")
+<<<<<<< Updated upstream
         q.task_done()
+=======
+        else:
+            if alerts_on == True and channel:
+                await channel.send(f'New alert: {alert}')
+        q.task_done()"""
+>>>>>>> Stashed changes
 
 keep_alive()
 

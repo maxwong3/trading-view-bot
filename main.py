@@ -1,12 +1,14 @@
 from flask import Flask, request, abort
 import threading
 import asyncio
+
 import discord
 from discord.ext import commands
 from discord import Embed
 import logging
 from dotenv import load_dotenv
 import os
+import json
 import psycopg
 
 q = asyncio.Queue()
@@ -35,6 +37,14 @@ def toggle_alerts(server_id):
         alerts_on = cur.fetchone()[0]
     return alerts_on
 
+def set_channel(server_id, channel_id, ticker):
+    with conn.cursor() as cur:
+        cur.execute('''
+            INSERT INTO channels (channel_id, server_id, ticker)
+            VALUES (%s, %s, %s);
+        ''', (channel_id, server_id, ticker))
+        conn.commit()
+
 
 
 @app.route('/')
@@ -43,7 +53,6 @@ def home():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    # TODO Potentially: add secret token system so not everybody who knows the server ID can just send webhooks (spam/security concern)
     if request.method == 'POST':
         asyncio.run_coroutine_threadsafe(q.put(request.get_json(force=True)), bot.loop)
         # Try to implement this (currently not working)
@@ -60,9 +69,23 @@ def run_flask():
         app.run(host="0.0.0.0", port=80)
 
 
+# json setup
+def load_json(filename):
+    if os.path.exists(filename):
+        with open(filename, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_json(filename, data):
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=4)
+
+
+
 def keep_alive():
     threading.Thread(target=run_flask).start()
 
+load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
@@ -70,17 +93,10 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-prefix = '!'
-
-bot = commands.Bot(command_prefix=prefix, intents=intents, help_command=None)
-
-channel = None
-alerts_on = None
-discord_server = None
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 @bot.event
 async def on_ready():
-    global cur
     print(f"We are ready to go in, {bot.user.name}")
 
     print("Connected to PostgreSQL")
@@ -91,28 +107,23 @@ async def on_ready():
                 alerts_on BOOLEAN DEFAULT TRUE
                 );
 ''')
+        cur.execute('''--begin-sql
+                CREATE TABLE IF NOT EXISTS channels (
+                channel_id BIGINT,
+                server_id BIGINT, 
+                ticker VARCHAR(50),
+                UNIQUE (server_id, ticker)
+                );
+''')
         conn.commit()
     bot.loop.create_task(alert_request())
-
-# When bot joins a server, add new entry to server database
-@bot.event
-async def on_guild_join(guild):
-    with conn.cursor() as cur:
-        cur.execute('''--begin-sql
-                    INSERT INTO servers (server_id, alerts_on) VALUES 
-                    (%s, TRUE)
-                    ON CONFLICT (server_id) DO NOTHING;
-                    
-''', (guild.id,))
-        conn.commit()
-    print(f"Added server {guild.id} to the database.")
 
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
     await bot.process_commands(message)
-
+    
 
 @bot.command()
 async def hello(ctx):
@@ -141,7 +152,7 @@ async def help(ctx):
 ```'''
 
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
-    embed.add_field(name="REQUIRED JSON FIELDS:",value="ticker, alert, server_id", inline=False)
+    embed.add_field(name="REQUIRED JSON FIELDS:",value="server_id, ticker, alert", inline=False)
     embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
 
     await ctx.send(embed=embed)
@@ -149,14 +160,16 @@ async def help(ctx):
 
 
 @bot.command()
-async def setchannel(ctx):
-    global channel
-    channel = ctx.channel
-    await ctx.send("Alerts will now be sent here in #" + channel.name)
+async def setchannel(ctx, ticker):
+    server_id = ctx.guild.id
+    channel_id = ctx.channel.id
+    
+    set_channel(server_id, channel_id, ticker)
+
+    await ctx.send(ticker + " alerts will now be sent here in #" + ctx.channel.name)
 
 @bot.command()
 async def alerts(ctx):
-    global alerts
     alerts_on = toggle_alerts(ctx.guild.id)
     if (alerts_on):
         await ctx.send("Alerts are now turned ON.")
@@ -169,13 +182,72 @@ async def setprefix(ctx, new_prefix):
     prefix = new_prefix
     await ctx.send("Prefix set to " + prefix + ".")
 
-
 async def alert_request():
+    while True:
+        alert = await q.get()
+        if isinstance(alert, dict):
+            # Validate required keys
+            if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
+                server_id = alert['server_id']
+                ticker = alert['ticker']
+
+                with conn.cursor() as cur:
+                    # Check if alerts are enabled for this server
+                    cur.execute('SELECT alerts_on FROM servers WHERE server_id = %s', (server_id,))
+                    res = cur.fetchone()
+                    alerts_on = res[0] if res else False
+
+                if alerts_on:
+                    with conn.cursor() as cur:
+                        # Get channel_id for this server and ticker
+                        cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s', (server_id, ticker))
+                        result = cur.fetchone()
+
+                    if result:
+                        channel_id = result[0]
+                        channel = bot.get_channel(channel_id)
+
+                        if channel:
+                            embed = Embed(
+                                title=f"🚨 Alert: {ticker}",
+                                description=alert['alert'],
+                                color=0x00b05e
+                            )
+                            # Add optional fields
+                            for field in ['exchange', 'time', 'interval', 'high', 'low', 'open', 'close']:
+                                if field in alert:
+                                    embed.add_field(name=field.capitalize(), value=alert[field], inline=True)
+
+                            embed.set_footer(text="Data powered with TradingView")
+
+                            await channel.send(embed=embed)
+                        else:
+                            print(f"Channel ID {channel_id} not found in bot cache.")
+                    else:
+                        print(f"No channel set for server {server_id} and ticker {ticker}.")
+                else:
+                    print(f"Alerts are disabled for server {server_id}.")
+            else:
+                print("ERROR: Missing required keys (server_id, ticker, alert) in alert JSON")
+        else:
+            # Handle non-dict alerts (if needed)
+            print(f"Received non-dict alert: {alert}")
+        q.task_done()
+
+"""async def alert_request():
     while True:
         alert = await q.get()
         if isinstance(alert, dict):
             if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
                 if alerts_on == True:
+                    with conn.cursor() as cur:
+                        cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s', (server_id, ticker))
+                        result = cur.fetchone()
+
+                    if result:
+                        channel_id = result[0]
+                        channel = bot.get_channel(channel_id)
+
                     if channel: 
                         embed = Embed(
                             title=f"🚨 Alert: {alert['ticker']}",
@@ -197,15 +269,36 @@ async def alert_request():
                         if 'close' in alert:
                             embed.add_field(name="Close", value=alert['close'], inline=True)
 
-                        embed.set_footer(text="Data powered with TradingView")
+                        if channel: 
+                            embed = Embed(
+                                title=f"🚨 Alert: {alert['ticker']}",
+                                description=f"{alert['alert']}",
+                                color=0x00b05e
+                            )
+                            if 'exchange' in alert:
+                                embed.add_field(name="Exchange", value=alert['exchange'], inline=False)
+                            if 'time' in alert:
+                                embed.add_field(name="Time", value=alert['time'], inline=False)
+                            if 'interval' in alert:
+                                embed.add_field(name="Interval", value=alert['interval'], inline=True)
+                            if 'high' in alert:
+                                embed.add_field(name="High", value=alert['high'], inline=True)
+                            if 'low' in alert:
+                                embed.add_field(name="Low", value=alert['low'], inline=True)
+                            if 'open' in alert:
+                                embed.add_field(name="Open", value=alert['open'], inline=True)
+                            if 'close' in alert:
+                                embed.add_field(name="Close", value=alert['close'], inline=True)
 
-                        await channel.send(embed=embed)
+                            embed.set_footer(text="Data powered with TradingView")
+
+                            await channel.send(embed=embed)
             else:
                 print("ERROR: One of server_id, ticker, or alert (required) not found as key in json")
         else:
             if alerts_on == True and channel:
                 await channel.send(f'New alert: {alert}')
-        q.task_done()
+        q.task_done()"""
 
 keep_alive()
 

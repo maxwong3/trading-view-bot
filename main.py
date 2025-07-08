@@ -41,8 +41,10 @@ def set_channel(server_id, channel_id, ticker):
     with conn.cursor() as cur:
         cur.execute('''
             INSERT INTO channels (channel_id, server_id, ticker)
-            VALUES (%s, %s, %s);
-        ''', (channel_id, server_id, ticker))
+            VALUES (%s, %s, %s)
+            ON CONFLICT (server_id, ticker) DO UPDATE
+            SET channel_id = EXCLUDED.channel_id;
+        ''', (channel_id, server_id, ticker.upper()))
         conn.commit()
 
 
@@ -166,7 +168,7 @@ async def setchannel(ctx, ticker):
     
     set_channel(server_id, channel_id, ticker)
 
-    await ctx.send(ticker + " alerts will now be sent here in #" + ctx.channel.name)
+    await ctx.send(ticker.upper() + " alerts will now be sent here in #" + ctx.channel.name)
 
 @bot.command()
 async def alerts(ctx):
@@ -185,6 +187,7 @@ async def setprefix(ctx, new_prefix):
 async def alert_request():
     while True:
         alert = await q.get()
+        print('Received alert')
         if isinstance(alert, dict):
             # Validate required keys
             if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
@@ -195,7 +198,10 @@ async def alert_request():
                     # Check if alerts are enabled for this server
                     cur.execute('SELECT alerts_on FROM servers WHERE server_id = %s', (server_id,))
                     res = cur.fetchone()
-                    alerts_on = res[0] if res else False
+                    if res:
+                        alerts_on = res[0]
+                    else:
+                        alerts_on = False
 
                 if alerts_on:
                     with conn.cursor() as cur:
@@ -222,7 +228,7 @@ async def alert_request():
 
                             await channel.send(embed=embed)
                         else:
-                            print(f"Channel ID {channel_id} not found in bot cache.")
+                            print(f"Channel ID {channel_id} not found.")
                     else:
                         print(f"No channel set for server {server_id} and ticker {ticker}.")
                 else:
@@ -233,72 +239,6 @@ async def alert_request():
             # Handle non-dict alerts (if needed)
             print(f"Received non-dict alert: {alert}")
         q.task_done()
-
-"""async def alert_request():
-    while True:
-        alert = await q.get()
-        if isinstance(alert, dict):
-            if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
-                if alerts_on == True:
-                    with conn.cursor() as cur:
-                        cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s', (server_id, ticker))
-                        result = cur.fetchone()
-
-                    if result:
-                        channel_id = result[0]
-                        channel = bot.get_channel(channel_id)
-
-                    if channel: 
-                        embed = Embed(
-                            title=f"🚨 Alert: {alert['ticker']}",
-                            description=f"{alert['alert']}",
-                            color=0x00b05e
-                        )
-                        if 'exchange' in alert:
-                            embed.add_field(name="Exchange", value=alert['exchange'], inline=False)
-                        if 'time' in alert:
-                            embed.add_field(name="Time", value=alert['time'], inline=False)
-                        if 'interval' in alert:
-                            embed.add_field(name="Interval", value=alert['interval'], inline=True)
-                        if 'high' in alert:
-                            embed.add_field(name="High", value=alert['high'], inline=True)
-                        if 'low' in alert:
-                            embed.add_field(name="Low", value=alert['low'], inline=True)
-                        if 'open' in alert:
-                            embed.add_field(name="Open", value=alert['open'], inline=True)
-                        if 'close' in alert:
-                            embed.add_field(name="Close", value=alert['close'], inline=True)
-
-                        if channel: 
-                            embed = Embed(
-                                title=f"🚨 Alert: {alert['ticker']}",
-                                description=f"{alert['alert']}",
-                                color=0x00b05e
-                            )
-                            if 'exchange' in alert:
-                                embed.add_field(name="Exchange", value=alert['exchange'], inline=False)
-                            if 'time' in alert:
-                                embed.add_field(name="Time", value=alert['time'], inline=False)
-                            if 'interval' in alert:
-                                embed.add_field(name="Interval", value=alert['interval'], inline=True)
-                            if 'high' in alert:
-                                embed.add_field(name="High", value=alert['high'], inline=True)
-                            if 'low' in alert:
-                                embed.add_field(name="Low", value=alert['low'], inline=True)
-                            if 'open' in alert:
-                                embed.add_field(name="Open", value=alert['open'], inline=True)
-                            if 'close' in alert:
-                                embed.add_field(name="Close", value=alert['close'], inline=True)
-
-                            embed.set_footer(text="Data powered with TradingView")
-
-                            await channel.send(embed=embed)
-            else:
-                print("ERROR: One of server_id, ticker, or alert (required) not found as key in json")
-        else:
-            if alerts_on == True and channel:
-                await channel.send(f'New alert: {alert}')
-        q.task_done()"""
 
 keep_alive()
 

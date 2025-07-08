@@ -17,11 +17,11 @@ app = Flask(__name__)
 
 load_dotenv()
 
-conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
 cur = None
 
 # SQL helper methods
 def toggle_alerts(server_id):
+    conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
     with conn.cursor() as cur:
         cur.execute(''' 
                     UPDATE servers
@@ -38,6 +38,7 @@ def toggle_alerts(server_id):
     return alerts_on
 
 def set_channel(server_id, channel_id, ticker):
+    conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
     with conn.cursor() as cur:
         cur.execute('''
             INSERT INTO channels (channel_id, server_id, ticker)
@@ -102,6 +103,7 @@ async def on_ready():
     print(f"We are ready to go in, {bot.user.name}")
 
     print("Connected to PostgreSQL")
+    conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
     with conn.cursor() as cur:
         cur.execute('''--begin-sql
                 CREATE TABLE IF NOT EXISTS servers (
@@ -142,7 +144,7 @@ async def help(ctx):
 {
   "ticker": "{{ticker}}",
   "alert": "Enter desired alert message here: e.g. BUY NOW! ",
-  "server_id": Your Discord server ID (e.g. 814304078158364750)
+  "server_id": Your Discord server ID (e.g. 814304078158364750),
   "time": "{{time}}" ,
   "open": "{{open}}",
   "close": "{{close}}",
@@ -186,59 +188,64 @@ async def setprefix(ctx, new_prefix):
 
 async def alert_request():
     while True:
-        alert = await q.get()
-        print('Received alert')
-        if isinstance(alert, dict):
-            # Validate required keys
-            if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
-                server_id = alert['server_id']
-                ticker = alert['ticker']
+        try: 
+            conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
+            alert = await q.get()
+            if isinstance(alert, dict):
+                # Validate required keys
+                if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
+                    server_id = alert['server_id']
+                    ticker = alert['ticker']
 
-                with conn.cursor() as cur:
-                    # Check if alerts are enabled for this server
-                    cur.execute('SELECT alerts_on FROM servers WHERE server_id = %s', (server_id,))
-                    res = cur.fetchone()
-                    if res:
-                        alerts_on = res[0]
-                    else:
-                        alerts_on = False
-
-                if alerts_on:
                     with conn.cursor() as cur:
-                        # Get channel_id for this server and ticker
-                        cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s', (server_id, ticker))
-                        result = cur.fetchone()
-
-                    if result:
-                        channel_id = result[0]
-                        channel = bot.get_channel(channel_id)
-
-                        if channel:
-                            embed = Embed(
-                                title=f"🚨 Alert: {ticker}",
-                                description=alert['alert'],
-                                color=0x00b05e
-                            )
-                            # Add optional fields
-                            for field in ['exchange', 'time', 'interval', 'high', 'low', 'open', 'close']:
-                                if field in alert:
-                                    embed.add_field(name=field.capitalize(), value=alert[field], inline=True)
-
-                            embed.set_footer(text="Data powered with TradingView")
-
-                            await channel.send(embed=embed)
+                        # Check if alerts are enabled for this server
+                        cur.execute('SELECT alerts_on FROM servers WHERE server_id = %s', (server_id,))
+                        res = cur.fetchone()
+                        if res:
+                            alerts_on = res[0]
                         else:
-                            print(f"Channel ID {channel_id} not found.")
+                            alerts_on = False
+
+                    if alerts_on:
+                        with conn.cursor() as cur:
+                            # Get channel_id for this server and ticker
+                            cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s', (server_id, ticker))
+                            result = cur.fetchone()
+
+                        if result:
+                            channel_id = result[0]
+                            channel = bot.get_channel(channel_id)
+
+                            if channel:
+                                embed = Embed(
+                                    title=f"🚨 Alert: {ticker}",
+                                    description=alert['alert'],
+                                    color=0x00b05e
+                                )
+                                # Add optional fields
+                                for field in ['exchange', 'time', 'interval', 'high', 'low', 'open', 'close']:
+                                    if field in alert:
+                                        embed.add_field(name=field.capitalize(), value=alert[field], inline=True)
+
+                                embed.set_footer(text="Data powered with TradingView")
+
+                                await channel.send(embed=embed)
+                            else:
+                                print(f"Channel ID {channel_id} not found.")
+                        else:
+                            print(f"No channel set for server {server_id} and ticker {ticker}.")
                     else:
-                        print(f"No channel set for server {server_id} and ticker {ticker}.")
+                        print(f"Alerts are disabled for server {server_id}.")
                 else:
-                    print(f"Alerts are disabled for server {server_id}.")
+                    print("ERROR: Missing required keys (server_id, ticker, alert) in alert JSON")
             else:
-                print("ERROR: Missing required keys (server_id, ticker, alert) in alert JSON")
-        else:
-            # Handle non-dict alerts (if needed)
-            print(f"Received non-dict alert: {alert}")
-        q.task_done()
+                # Handle non-dict alerts (if needed)
+                print(f"Received non-dict alert: {alert}")
+        except Exception as e:
+            print(f"ERROR while processing alert: {e}")
+            conn.rollback()
+        finally:
+            q.task_done()
 
 keep_alive()
 

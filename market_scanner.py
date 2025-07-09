@@ -128,62 +128,74 @@ def cross_above(series,level):
 def cross_below(series, level):
     return((series.shift(1) >= level.shift(1)) & (series < level))
 #----------------------------------------------------------
-
-def fetch_and_analyze(coin_id: str, days: int = 30) -> pd.DataFrame:
+def calculate_indicators_and_signals(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Fetches historical data for a coin from CoinGecko and returns a
-    DataFrame with a full set of technical indicators and trading signals.
+    Takes a DataFrame (of any timeframe) and adds all indicators and signals.
+    This function is reusable for daily, weekly, etc. charts.
     """
-    # Step 1: Fetch the data
-    try:
-        data = cg.get_coin_market_chart_by_id(
-            coin_id,
-            vs_currency="usd",
-            days=days,
-            interval="hourly"
-        )
-    except Exception as e:
-        print(f"Error fetching data for {coin_id}: {e}")
-        return pd.DataFrame() 
+    if df.empty or len(df) < 200:
+        # Not enough data to calculate 200-period indicators, return empty
+        return pd.DataFrame()
 
-    prices = data.get("prices", [])
-    volumes = data.get("total_volumes", [])
-    if not prices or not volumes:
-        return pd.DataFrame() 
-
-    df = pd.DataFrame({
-        "time":   [p[0] for p in prices],
-        "close":  [p[1] for p in prices],
-        "volume": [v[1] for v in volumes],
-    })
-    df["time"] = pd.to_datetime(df["time"], unit="ms")
-    df = df.set_index("time").sort_index()
-
-    # Calculate ALL indicators and signals
+    # --- Indicators ---
     df['rsi'] = ta.momentum.rsi(df['close'], window=14)
     df["ema_9"]   = df["close"].ewm(span=9,   adjust=False).mean()
     df["ema_21"]  = df["close"].ewm(span=21,  adjust=False).mean()
     df["ema_50"]  = df["close"].ewm(span=50,  adjust=False).mean()
     df["ema_200"] = df["close"].ewm(span=200, adjust=False).mean()
     df['sma_200'] = df['close'].rolling(window=200).mean()
-    df["20p_high"] = df["close"].rolling(20).max()
-    df["20p_low"]  = df["close"].rolling(20).min()
-    df["vwap"] = (df["close"] * df["volume"]).groupby(df.index.date).cumsum() / df["volume"].groupby(df.index.date).cumsum()
-    #Check for crossing signals
+    df["20p_high"] = df["close"].rolling(window=20).max()
+    df["20p_low"]  = df["close"].rolling(window=20).min()
+
+    # --- Signals (Crosses and Breaks) ---
     df['price_above_ema200'] = cross_above(df['close'], df['ema_200'])
     df['price_below_ema200'] = cross_below(df['close'], df['ema_200'])
     df['cross_above_sma200'] = cross_above(df['close'], df['sma_200'])
     df['cross_below_sma200'] = cross_below(df['close'], df['sma_200'])
-    df['cross_above_vwap']   = cross_above(df['close'], df['vwap'])
-    df['cross_below_vwap']   = cross_below(df['close'], df['vwap'])
     df['20p_high_break']     = df['close'] > df['20p_high'].shift(1)
-    df['20p_low_break']      = df['close'] < df['20p_low'].shift(1) 
+    df['20p_low_break']      = df['close'] < df['20p_low'].shift(1)
     df['ema9_above_ema21']   = cross_above(df['ema_9'], df['ema_21'])
     df['ema9_below_ema21']   = cross_below(df['ema_9'], df['ema_21'])
     df['golden_cross']      = cross_above(df['ema_50'], df['ema_200'])
     df['death_cross']       = cross_below(df['ema_50'], df['ema_200'])
 
     return df
+
+
+def get_multi_timeframe_analysis(coin_id: str) -> dict[str, pd.DataFrame]:
+    """
+    Fetches DAILY data and resamples it to create Daily, Weekly, and
+    Monthly analysis DataFrames.
+    Returns a dictionary of DataFrames, one for each timeframe.
+    """
+    try:
+        # Fetch 2 years of daily data to have enough for weekly/monthly analysis
+        data = cg.get_coin_market_chart_by_id(
+            coin_id, vs_currency="usd", days=730, interval="daily"
+        )
+    except Exception as e:
+        print(f"Error fetching daily data for {coin_id}: {e}")
+        return {}
+
+    prices = data.get("prices", [])
+    if not prices:
+        return {}
+
+    # Create the base DAILY DataFrame
+    df_daily = pd.DataFrame(prices, columns=["time", "close"])
+    df_daily["time"] = pd.to_datetime(df_daily["time"], unit="ms")
+    df_daily = df_daily.set_index("time")
+
+    # Resample Daily data to get Weekly and Monthly charts
+    df_weekly = df_daily.resample('W').agg({'close': 'last'}).dropna()
+    df_monthly = df_daily.resample('ME').agg({'close': 'last'}).dropna()
+
+    analysis = {
+        "Daily": calculate_indicators_and_signals(df_daily),
+        "Weekly": calculate_indicators_and_signals(df_weekly),
+        "Monthly": calculate_indicators_and_signals(df_monthly),
+    }
+    return analysis
 # --------------------------------------------------------
 async def check_and_send_alerts(coin_id: str, period: str, latest_signals: pd.Series):
     """Checks the latest signals for a coin and sends alerts if triggers are met."""
@@ -214,10 +226,10 @@ async def check_price_movements():
         print(f"[{datetime.datetime.now(datetime.UTC)}] — New market scan")
         alert_channel = bot.get_channel(CONFIG["ALERT_CHANNEL_ID"])
         if not alert_channel:
-            print("!!! Cannot find alert channel. Check ALERT_CHANNEL_ID.")
+            print(f"!!! Cannot find alert channel. Check ID: {CONFIG['ALERT_CHANNEL_ID']}")
             return
-        
 
+        # 1. Get market data including all price change percentages
         markets = cg.get_coins_markets(
             vs_currency="usd",
             order="market_cap_desc",
@@ -227,76 +239,70 @@ async def check_price_movements():
         )
 
         for coin in markets:
-            coin_id   = coin["id"]
-            change_1h = coin.get("price_change_percentage_1h_in_currency")
-            change_24h= coin.get("price_change_percentage_24h_in_currency")
-            change_7d = coin.get("price_change_percentage_7d_in_currency")
-            if None in (coin_id, change_1h, change_24h, change_7d):
-                continue  # skip incomplete data
-            df = await bot.loop.run_in_executor(
-                None,
-                fetch_price_history,
-                coin_id, 7
-                )
-            rsi_value = await bot.loop.run_in_executor(None, latestrsi, df, 14)
-            if rsi_value > 70:
-                rsi_label = "Overbought 📈"
-            elif rsi_value < 30:
-                rsi_label = "Oversold 📉"
-            else:
-                rsi_label = f"RSI {rsi_value:.1f}"
-            cg_technical = fetch_and_analyze(df)
-            if cg_technical['price_above']
+            coin_id = coin["id"]
+            print(f"--- Analyzing {coin_id.upper()} ---")
 
-
-
-            # Build embeds once per coin
-            hourembed = create_movement_embed(
-                coin_id=coin_id,
-                price=coin["current_price"],
-                market_cap=coin["market_cap"],
-                change_1h=change_1h,
-                rsi_label=rsi_label,
-                rsi_value = rsi_value
-            )
-            dayembed = create_movement_embed(
-                coin_id=coin_id,
-                price=coin["current_price"],
-                market_cap=coin["market_cap"],
-                change_24h=change_24h,
-                rsi_label=rsi_label,
-                rsi_value = rsi_value
-            )
-            weekembed = create_movement_embed(
-                coin_id=coin_id,
-                price=coin["current_price"],
-                market_cap=coin["market_cap"],
-                change_7d=change_7d,
-                rsi_label=rsi_label,
-                rsi_value = rsi_value
-            )
-
-            # ---- 1‑hour alert ----
-            hour_key = (coin_id, "1h")
-            if abs(change_1h) >= CONFIG["PRICE_CHANGE_THRESHOLD"] and cooldown_ok(hour_key) and (rsi_value > 70 or rsi_value < 30):
-                await alert_channel.send(embed=hourembed)
-                recent_alerts[hour_key] = datetime.datetime.now(datetime.UTC)
-
-            # ---- 24‑hour alert ----
-            day_key = (coin_id, "24h")
-            if abs(change_24h) >= CONFIG["PRICE_CHANGE_THRESHOLD"] and cooldown_ok(day_key) and (rsi_value > 70 or rsi_value < 30):
-                await alert_channel.send(embed=dayembed)
-                recent_alerts[day_key] = datetime.datetime.now(datetime.UTC)
-
-            # ---- 7‑day alert ----
-            week_key = (coin_id, "7d")
-            if abs(change_7d) >= CONFIG["PRICE_CHANGE_THRESHOLD"] and cooldown_ok(week_key) and (rsi_value > 70 or rsi_value < 30):
-                await alert_channel.send(embed=weekembed)
-                recent_alerts[week_key] = datetime.datetime.now(datetime.UTC)
             
-            await asyncio.sleep(2)
+            all_analyses = await bot.loop.run_in_executor(
+                None, get_multi_timeframe_analysis, coin_id
+            )
+
+            # --- A: Check for Technical Indicator Alerts (Golden Cross, etc.) ---
+            for timeframe, df in all_analyses.items():
+                if not df.empty:
+                    latest_signals = df.iloc[-1]
+                    await check_and_send_alerts(
+                        coin_id=coin_id,
+                        period=timeframe,
+                        latest_signals=latest_signals
+                    )
+
+            # --- B: Check for Large Price Movement Alerts (1h, 24h, 7d) ---
+            change_1h = coin.get("price_change_percentage_1h_in_currency")
+            change_24h = coin.get("price_change_percentage_24h_in_currency")
+            change_7d = coin.get("price_change_percentage_7d_in_currency")
+
+            
+            daily_df = all_analyses.get("Daily")
+            weekly_df = all_analyses.get("Weekly")
+
+            # ---- 1-Hour Movement Alert ----
+            if daily_df is not None and not daily_df.empty and change_1h is not None:
+                rsi_value = daily_df.iloc[-1]['rsi'] # Use Daily RSI as a proxy for hourly momentum
+                if pd.notna(rsi_value) and (rsi_value > 70 or rsi_value < 30):
+                    hour_key = (coin_id, "1h_move")
+                    if abs(change_1h) >= CONFIG["PRICE_CHANGE_THRESHOLD"] and cooldown_ok(hour_key):
+                        rsi_label = f"Overbought ({rsi_value:.1f}) 📈" if rsi_value > 70 else f"Oversold ({rsi_value:.1f}) 📉"
+                        embed = create_movement_embed(coin_id=coin_id, price=coin["current_price"], market_cap=coin["market_cap"], change_1h=change_1h, rsi_label=rsi_label, rsi_value=rsi_value)
+                        await alert_channel.send(embed=embed)
+                        recent_alerts[hour_key] = datetime.datetime.now(datetime.UTC)
+
+            # ---- 24-Hour Movement Alert ----
+            if daily_df is not None and not daily_df.empty and change_24h is not None:
+                rsi_value = daily_df.iloc[-1]['rsi'] # Use Daily RSI, a perfect match for 24h change
+                if pd.notna(rsi_value) and (rsi_value > 70 or rsi_value < 30):
+                    day_key = (coin_id, "24h_move")
+                    if abs(change_24h) >= CONFIG["PRICE_CHANGE_THRESHOLD"] and cooldown_ok(day_key):
+                        rsi_label = f"Overbought ({rsi_value:.1f}) 📈" if rsi_value > 70 else f"Oversold ({rsi_value:.1f}) 📉"
+                        embed = create_movement_embed(coin_id=coin_id, price=coin["current_price"], market_cap=coin["market_cap"], change_24h=change_24h, rsi_label=rsi_label, rsi_value=rsi_value)
+                        await alert_channel.send(embed=embed)
+                        recent_alerts[day_key] = datetime.datetime.now(datetime.UTC)
+
+            # ---- 7-Day Movement Alert ----
+            if weekly_df is not None and not weekly_df.empty and change_7d is not None:
+                rsi_value = weekly_df.iloc[-1]['rsi']
+                if pd.notna(rsi_value) and (rsi_value > 70 or rsi_value < 30):
+                    week_key = (coin_id, "7d_move")
+                    if abs(change_7d) >= CONFIG["PRICE_CHANGE_THRESHOLD"] and cooldown_ok(week_key):
+                        rsi_label = f"Overbought ({rsi_value:.1f}) 📈" if rsi_value > 70 else f"Oversold ({rsi_value:.1f}) 📉"
+                        embed = create_movement_embed(coin_id=coin_id, price=coin["current_price"], market_cap=coin["market_cap"], change_7d=change_7d, rsi_label=rsi_label, rsi_value=rsi_value)
+                        await alert_channel.send(embed=embed)
+                        recent_alerts[week_key] = datetime.datetime.now(datetime.UTC)
+
+            await asyncio.sleep(5) 
 
     except Exception:
+        print("!!! FATAL ERROR in check_price_movements loop !!!")
         traceback.print_exc()
 
 # ---------------------------------------------------------

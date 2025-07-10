@@ -68,8 +68,7 @@ def webhook():
         abort(400)
 
 def run_flask():
-    if __name__ == "__main__":
-        app.run(host="0.0.0.0", port=80)
+    app.run(host="0.0.0.0", port=80)
 
 
 # json setup
@@ -88,7 +87,6 @@ def save_json(filename, data):
 def keep_alive():
     threading.Thread(target=run_flask).start()
 
-load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
@@ -96,7 +94,21 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+async def get_prefix(bot, message):
+    if message.guild is None:
+        return '!'
+    conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
+    with conn.cursor() as cur:
+        cur.execute('''
+            SELECT prefix FROM servers
+            WHERE server_id = %s
+        ''', (message.guild.id,))
+        prefix = cur.fetchone()
+
+    return prefix[0] if prefix else '!'
+
+
+bot = commands.Bot(command_prefix=get_prefix, intents=intents, help_command=None)
 
 @bot.event
 async def on_ready():
@@ -108,7 +120,8 @@ async def on_ready():
         cur.execute('''--begin-sql
                 CREATE TABLE IF NOT EXISTS servers (
                 server_id BIGINT PRIMARY KEY, 
-                alerts_on BOOLEAN DEFAULT TRUE
+                alerts_on BOOLEAN DEFAULT TRUE,
+                prefix VARCHAR(10)
                 );
 ''')
         cur.execute('''--begin-sql
@@ -157,14 +170,18 @@ async def help(ctx):
 
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
     embed.add_field(name="REQUIRED JSON FIELDS:",value="server_id, ticker, alert", inline=False)
-    embed.add_field(name="Other commands:", value="!setchannel, !alerts", inline=False)
+    embed.add_field(name="Other commands:", value="!setchannel, !removealert, !alerts, !prefix", inline=False)
 
     await ctx.send(embed=embed)
 
 
 
 @bot.command()
-async def setchannel(ctx, ticker):
+async def setchannel(ctx, ticker=None):
+    if not ticker:
+        await ctx.send("❌ Incorrect usage, specify ticker of active TradingView alert to add: e.g. !setchannel BTCUSD")
+        return
+
     server_id = ctx.guild.id
     channel_id = ctx.channel.id
     
@@ -173,7 +190,29 @@ async def setchannel(ctx, ticker):
     await ctx.send(ticker.upper() + " alerts will now be sent here in #" + ctx.channel.name)
 
 @bot.command()
-async def alerts(ctx):
+async def removealert(ctx, ticker=None):
+    if not ticker:
+        await ctx.send("❌ Incorrect usage, specify ticker of alert to remove: e.g. !removealert BTCUSD")
+        return
+    ticker = ticker.upper()
+    conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
+
+    with conn.cursor() as cur:
+        cur.execute('''
+                    DELETE FROM channels
+                    WHERE server_id = %s AND ticker = %s
+                    RETURNING *;
+        ''', (ctx.guild.id, ticker))
+        deleted = cur.fetchone()
+
+    if deleted:
+        await ctx.send(f"Alert {ticker} has been removed from this server.")
+    else:
+        await ctx.send(f"❌ ERROR: Alert {ticker} doesn't exist in this server.")
+
+
+@bot.command()
+async def togglealerts(ctx):
     alerts_on = toggle_alerts(ctx.guild.id)
     if (alerts_on):
         await ctx.send("Alerts are now turned ON.")
@@ -181,10 +220,53 @@ async def alerts(ctx):
         await ctx.send("Alerts are now turned OFF.")
 
 @bot.command()
+async def alerts(ctx):
+    conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
+
+    with conn.cursor() as cur:
+        cur.execute('''
+                    SELECT ticker, channel_id
+                    FROM channels
+                    WHERE server_id = %s;
+        ''', (ctx.guild.id,))
+        channels = cur.fetchall()
+
+    if not channels:
+        await ctx.send("No active alerts in this server. Use command !setchannel [ticker] to set an active ticker alert to the channel.")
+        return
+
+    
+    embed = Embed(
+        title="List of Active Alerts"
+    )
+
+    for ticker, channel_id in channels:
+        channel = bot.get_channel(channel_id)
+        if channel:
+            embed.add_field(name=ticker, value=f"#{channel.name}", inline=False)
+        else:
+            embed.add_field(name=ticker, value=f"Possibly deleted channel with channel ID: {channel_id}")
+
+    await ctx.send(embed=embed)
+
+@bot.command()
+@commands.has_permissions(administrator=True)
 async def setprefix(ctx, new_prefix):
-    global prefix
-    prefix = new_prefix
-    await ctx.send("Prefix set to " + prefix + ".")
+    if not new_prefix:
+        await ctx.send("❌ Incorrect usage, specify prefix: e.g. !setprefix ?")
+    if len(new_prefix) > 5:
+        await ctx.send("❌ ERROR: Prefix must be 5 characters or less.")
+    conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
+    with conn.cursor() as cur:
+        cur.execute('''
+                    INSERT INTO servers (server_id, alerts_on, prefix)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (server_id) DO UPDATE
+                    SET prefix = EXCLUDED.prefix;
+        ''', (ctx.guild.id, True, new_prefix))
+        conn.commit()
+
+    await ctx.send(f"Prefix for this server set to {new_prefix}")
 
 async def alert_request():
     while True:

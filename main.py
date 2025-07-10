@@ -73,6 +73,7 @@ def run_flask():
 
 # json setup
 def load_json(filename):
+
     if os.path.exists(filename):
         with open(filename, 'r') as f:
             return json.load(f)
@@ -121,7 +122,7 @@ async def on_ready():
                 CREATE TABLE IF NOT EXISTS servers (
                 server_id BIGINT PRIMARY KEY, 
                 alerts_on BOOLEAN DEFAULT TRUE,
-                prefix VARCHAR(10)
+                prefix VARCHAR(10) DEFAULT '!'
                 );
 ''')
         cur.execute('''--begin-sql
@@ -170,7 +171,7 @@ async def help(ctx):
 
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
     embed.add_field(name="REQUIRED JSON FIELDS:",value="server_id, ticker, alert", inline=False)
-    embed.add_field(name="Other commands:", value="!setchannel, !removealert, !alerts, !prefix", inline=False)
+    embed.add_field(name="Other commands:", value="!setchannel, !removealert, !alerts, !togglealerts, !prefix", inline=False)
 
     await ctx.send(embed=embed)
 
@@ -204,6 +205,7 @@ async def removealert(ctx, ticker=None):
                     RETURNING *;
         ''', (ctx.guild.id, ticker))
         deleted = cur.fetchone()
+        conn.commit()
 
     if deleted:
         await ctx.send(f"Alert {ticker} has been removed from this server.")
@@ -254,8 +256,10 @@ async def alerts(ctx):
 async def setprefix(ctx, new_prefix):
     if not new_prefix:
         await ctx.send("❌ Incorrect usage, specify prefix: e.g. !setprefix ?")
+        return
     if len(new_prefix) > 5:
         await ctx.send("❌ ERROR: Prefix must be 5 characters or less.")
+        return
     conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
     with conn.cursor() as cur:
         cur.execute('''

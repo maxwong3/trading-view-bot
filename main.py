@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 import json
 import psycopg
+from datetime import datetime
 
 q = asyncio.Queue()
 
@@ -68,8 +69,7 @@ def webhook():
         abort(400)
 
 def run_flask():
-    if __name__ == "__main__":
-        app.run(host="0.0.0.0", port=80)
+    app.run(host="0.0.0.0", port=80)
 
 
 # json setup
@@ -279,7 +279,7 @@ async def alert_request():
             conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
             alert = await q.get()
             if isinstance(alert, dict):
-                # Validate required keys
+                # Required json keys 
                 if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
                     server_id = alert['server_id']
                     ticker = alert['ticker']
@@ -309,10 +309,16 @@ async def alert_request():
                                     description=alert['alert'],
                                     color=0x00b05e
                                 )
-                                # Add optional fields
+                                # Optional fields
                                 for field in ['exchange', 'time', 'interval', 'high', 'low', 'open', 'close']:
                                     if field in alert:
-                                        embed.add_field(name=field.capitalize(), value=alert[field], inline=True)
+                                        value = alert[field]
+                                        if field == 'time':
+                                            try:
+                                                value = datetime.fromisoformat(value).strftime('%Y-%m-%d %H:%M UTC')
+                                            except Exception:
+                                                pass
+                                        embed.add_field(name=field.capitalize(), value=value, inline=True)
 
                                 embed.set_footer(text="Data powered with TradingView")
 

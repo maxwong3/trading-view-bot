@@ -178,6 +178,7 @@ async def help(ctx):
   "ticker": "{{ticker}}",
   "alert": "Enter desired alert message here: e.g. BUY NOW! ",
   "server_id": Your Discord server ID (e.g. 814304078158364750),
+  "signal_type": "For advanced signals e.g. BUY or SELL",
   "time": "{{time}}" ,
   "open": "{{open}}",
   "close": "{{close}}",

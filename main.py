@@ -11,6 +11,8 @@ import os
 import json
 import psycopg
 from datetime import datetime
+import logging
+import sys
 
 q = asyncio.Queue()
 
@@ -19,6 +21,15 @@ app = Flask(__name__)
 load_dotenv()
 
 cur = None
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout), 
+        logging.FileHandler("discord.log", encoding="utf-8", mode="w")  
+    ]
+)
 
 # SQL helper methods
 def toggle_alerts(server_id):
@@ -38,15 +49,20 @@ def toggle_alerts(server_id):
         alerts_on = cur.fetchone()[0]
     return alerts_on
 
-def set_channel(server_id, channel_id, ticker):
+def set_channel(server_id, channel_id, ticker, signal=None):
+    print("called")
     conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
+    # Handles advanced signals
+    signal_type = 'NONE' if signal is None else signal.upper()
+    print(ticker)
+    print(signal_type)
     with conn.cursor() as cur:
         cur.execute('''
-            INSERT INTO channels (channel_id, server_id, ticker)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (server_id, ticker) DO UPDATE
-            SET channel_id = EXCLUDED.channel_id;
-        ''', (channel_id, server_id, ticker.upper()))
+                    INSERT INTO channels (channel_id, server_id, ticker, signal_type)
+                    VALUES(%s, %s, %s, %s)
+                    ON CONFLICT (server_id, ticker, signal_type) DO UPDATE
+                    SET channel_id = EXCLUDED.channel_id
+                    ''', (channel_id, server_id, ticker.upper(), signal_type))
         conn.commit()
 
 
@@ -128,10 +144,12 @@ async def on_ready():
 ''')
         cur.execute('''--begin-sql
                 CREATE TABLE IF NOT EXISTS channels (
+                id SERIAL PRIMARY KEY,
                 channel_id BIGINT,
                 server_id BIGINT, 
                 ticker VARCHAR(50),
-                UNIQUE (server_id, ticker)
+                signal_type VARCHAR(50) DEFAULT 'NONE',
+                UNIQUE (server_id, ticker, signal_type)
                 );
 ''')
         conn.commit()
@@ -179,7 +197,7 @@ async def help(ctx):
 
 
 @bot.command()
-async def setchannel(ctx, ticker=None):
+async def setchannel(ctx, ticker=None, signal=None):
     if not ticker:
         await ctx.send("❌ Incorrect usage, specify ticker of active TradingView alert to add: e.g. !setchannel BTCUSD")
         return
@@ -187,29 +205,36 @@ async def setchannel(ctx, ticker=None):
     server_id = ctx.guild.id
     channel_id = ctx.channel.id
     
-    set_channel(server_id, channel_id, ticker)
-
-    await ctx.send(ticker.upper() + " alerts will now be sent here in #" + ctx.channel.name)
+    set_channel(server_id, channel_id, ticker, signal)
+    
+    if signal is None:
+        await ctx.send(ticker.upper() + " alerts will now be sent here in #" + ctx.channel.name)
+    else: 
+        await ctx.send("Advanced signal " + signal.upper() + " for coin " + ticker.upper() + " will now be sent here in #" + ctx.channel.name)
 
 @bot.command()
-async def removealert(ctx, ticker=None):
+async def removealert(ctx, ticker=None, signal=None):
     if not ticker:
         await ctx.send("❌ Incorrect usage, specify ticker of alert to remove: e.g. !removealert BTCUSD")
         return
     ticker = ticker.upper()
     conn = psycopg.connect(host=os.getenv('DB_HOST', 'localhost'), dbname=os.getenv('DB_NAME', 'postgres'), user=os.getenv('DB_USER', 'postgres'), password=os.getenv('DB_PASSWORD', 'postgres'), port=os.getenv('DB_PORT', 5432))
 
+    signal_type = 'NONE' if signal is None else signal.upper()
     with conn.cursor() as cur:
         cur.execute('''
                     DELETE FROM channels
-                    WHERE server_id = %s AND ticker = %s
+                    WHERE server_id = %s AND ticker = %s AND signal_type = %s
                     RETURNING *;
-        ''', (ctx.guild.id, ticker))
+        ''', (ctx.guild.id, ticker, signal_type))
         deleted = cur.fetchone()
         conn.commit()
 
     if deleted:
-        await ctx.send(f"Alert {ticker} has been removed from this server.")
+        if signal_type == 'NONE':
+            await ctx.send(f"Alert {ticker} has been removed from this server.")
+        else: 
+            await ctx.send(f"Advanced signal {signal_type} for coin {ticker} has been removed from this server.")
     else:
         await ctx.send(f"❌ ERROR: Alert {ticker} doesn't exist in this server.")
 
@@ -228,7 +253,7 @@ async def alerts(ctx):
 
     with conn.cursor() as cur:
         cur.execute('''
-                    SELECT ticker, channel_id
+                    SELECT ticker, channel_id, signal_type
                     FROM channels
                     WHERE server_id = %s;
         ''', (ctx.guild.id,))
@@ -243,10 +268,13 @@ async def alerts(ctx):
         title="List of Active Alerts"
     )
 
-    for ticker, channel_id in channels:
+    for ticker, channel_id, signal_type in channels:
         channel = bot.get_channel(channel_id)
         if channel:
-            embed.add_field(name=ticker, value=f"#{channel.name}", inline=False)
+            if signal_type == 'NONE':  
+                embed.add_field(name="⚪ Coin: " + ticker, value=f"Sent in #{channel.name}", inline=False)
+            else: 
+                embed.add_field(name="⭐ Advanced Signal: " + signal_type + ", Coin: " + ticker, value=f"Sent in #{channel.name}", inline=False)
         else:
             embed.add_field(name=ticker, value=f"Possibly deleted channel with channel ID: {channel_id}")
 
@@ -283,6 +311,10 @@ async def alert_request():
                 if 'server_id' in alert and 'ticker' in alert and 'alert' in alert:
                     server_id = alert['server_id']
                     ticker = alert['ticker']
+                    # Check if advanced signal
+                    signal_type = 'NONE'
+                    if 'signal_type' in alert:
+                        signal_type = alert['signal_type']
 
                     with conn.cursor() as cur:
                         # Check if alerts are enabled for this server
@@ -296,7 +328,7 @@ async def alert_request():
                     if alerts_on:
                         with conn.cursor() as cur:
                             # Get channel_id for this server and ticker
-                            cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s', (server_id, ticker))
+                            cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s AND signal_type = %s', (server_id, ticker, signal_type))
                             result = cur.fetchone()
 
                         if result:
@@ -310,15 +342,22 @@ async def alert_request():
                                     color=0x00b05e
                                 )
                                 # Optional fields
-                                for field in ['exchange', 'time', 'interval', 'high', 'low', 'open', 'close']:
+                                for field in ['signal_type', 'exchange', 'time', 'interval', 'high', 'low', 'open', 'close']:
                                     if field in alert:
                                         value = alert[field]
+                                        name = field.capitalize()
                                         if field == 'time':
                                             try:
                                                 value = datetime.fromisoformat(value).strftime('%Y-%m-%d %H:%M UTC')
                                             except Exception:
                                                 pass
-                                        embed.add_field(name=field.capitalize(), value=value, inline=True)
+                                        if field == 'signal_type':
+                                            if alert['signal_type'].upper() == 'NONE':
+                                                continue
+                                            else:
+                                                name = 'Advanced Signal'
+                                                value = alert[field].upper()
+                                        embed.add_field(name=name, value=value, inline=True)
 
                                 embed.set_footer(text="Data powered with TradingView")
 
@@ -339,6 +378,7 @@ async def alert_request():
             conn.rollback()
         finally:
             q.task_done()
+            conn.close()
 
 keep_alive()
 

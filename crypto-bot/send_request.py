@@ -6,8 +6,8 @@ headers = {"Content-Type": "application/json"}
 
 payload = {
     "ticker": "BTCUSD",
-    "alert": "BUY SIGNAL!",
-    "secret": "jhohn",
+    "alert": "Moving up by 1% last hour",
+    "secret": "secret",
     "server_id": 1386798662616748153,  # Replace with your server ID
     "time": "2025-07-28T15:34:00Z",
     "open": 29500,

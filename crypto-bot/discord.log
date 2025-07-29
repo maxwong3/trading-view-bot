@@ -1,1 +1,39 @@
-2025-07-28 18:24:33,231 | WARNING | PyNaCl is not installed, voice will NOT be supported
+logging in using static token
+Shard ID None has connected to Gateway (Session ID: b2239cf607052b91ea900081aeee4ad7).
+O | logging in using static token
+2025-07-29 00:59:46,908 | INFO | Shard ID None has connected to Gateway (Session ID: b2239cf607052b91ea900081aeee4ad7).
+2025-07-29 00:59:48,414 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:48,416 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:48,418 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:48,924 | INFO | We are ready to go in, crypto bot
+2025-07-29 00:59:48,924 | INFO | Connected to PostgreSQL
+2025-07-29 00:59:50,704 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:51,733 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:51,781 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:52,983 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:54,064 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:56,053 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:56,189 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:57,454 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 00:59:58,482 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:02,418 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:02,711 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:04,079 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:05,030 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:12,839 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:13,460 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:15,037 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:15,859 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:18,925 | ERROR | DB initialization error: couldn't get a connection after 30.00 sec
+2025-07-29 01:00:31,360 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:32,665 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:34,653 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:00:35,212 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:01:06,163 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:01:08,834 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:01:11,602 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:01:11,649 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:02:13,454 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:02:18,804 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:02:22,192 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed
+2025-07-29 01:02:23,223 | WARNING | error connecting in 'pool-1': [Errno 11001] getaddrinfo failed

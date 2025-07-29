@@ -1,6 +1,8 @@
 import requests
 import json
 
+# Simulate TradingView webhook post request
+
 url = "http://localhost/webhook"
 headers = {"Content-Type": "application/json"}
 

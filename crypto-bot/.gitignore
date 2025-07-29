@@ -1,2 +1,4 @@
 .env
 /json/*.json
+__pycache__/
+*.py[cod]

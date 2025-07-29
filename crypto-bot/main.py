@@ -13,12 +13,13 @@ from contextlib import asynccontextmanager
 from shared import logger, queue
 from db import pool
 from bot import bot
+from models import AlertPayload
 
 asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
 
 load_dotenv()
 
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler = logging.StreamHandler(sys.stdout)
 logger = logging.getLogger("discord")
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
@@ -26,11 +27,28 @@ logger.addHandler(handler)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await pool.open()
-    task = asyncio.create_task(bot.start(os.getenv("DISCORD_TOKEN")))
+    token = os.getenv("DISCORD_TOKEN")
+    if not token:
+        raise RuntimeError("DISCORD_TOKEN not set in .env")
+    task = asyncio.create_task(bot.start(token))
     yield
-    await bot.close()
-    await task
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        logger.info("Bot task cancelled cleanly.")
 
+    try:
+        await bot.close()
+        logger.info("Bot closed.")
+    except Exception as e:
+        logger.warning(f"Error during bot close: {e}")
+    try:
+        await pool.close()
+        logger.info("Database pool closed.")
+    except Exception as e:
+        logger.warning(f"Error closing DB pool: {e}")
+        
 app = FastAPI(lifespan=lifespan)
 
 
@@ -38,12 +56,16 @@ app = FastAPI(lifespan=lifespan)
 async def home():
     return {'Message': 'Running'}
 
+@app.get('/health')
+async def health():
+    return {"status": "healthy"}
+
 @app.post('/webhook')
-async def webhook(request: Request):
+async def webhook(payload: AlertPayload):
     try:
-        json_data = await request.json()
-        asyncio.run_coroutine_threadsafe(queue.put(json_data), bot.loop)
+        await queue.put(payload.model_dump(exclude_unset=True))
         # 200 Success
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error("Webhook error")
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")

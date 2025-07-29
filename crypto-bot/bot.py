@@ -10,6 +10,7 @@ from shared import queue, logger
 from shared import get_prefix, toggle_alerts, set_channel, set_secret, get_secret
 from db import pool
 from datetime import datetime
+import traceback
 
 load_dotenv()
 
@@ -241,8 +242,11 @@ async def setprefix(ctx, new_prefix):
 async def alert_request():
     logger.info("✅ alert_request loop started.")
     while True:
+        item_added = False
         try: 
             alert = await queue.get()
+            item_added = True
+            logger.info(f"Alert received in queue: {alert}")
             async with pool.connection() as conn:
                 saved_secret = None
                 if isinstance(alert, dict):
@@ -252,13 +256,13 @@ async def alert_request():
                         ticker = alert['ticker']
                         # Check if advanced signal
                         signal_type = 'NONE'
-                        if 'signal_type' in alert:
-                            signal_type = alert['signal_type']
-
+                        if 'signal_type' in alert and alert['signal_type']:
+                            signal_type = alert['signal_type'].upper()
+                        logger.info(signal_type)
                         # Check for secret
-                        secret = None
-                        if 'secret' in alert:
-                            secret = alert['secret'].strip()
+                        secret = alert.get('secret')
+                        if secret is not None:
+                            secret = secret.strip()
 
                         async with conn.cursor() as cur:
                             # Check if alerts are enabled for this server
@@ -278,6 +282,8 @@ async def alert_request():
                                 # Get channel_id for this server and ticker
                                 await cur.execute('SELECT channel_id FROM channels WHERE server_id = %s AND ticker = %s AND signal_type = %s', (server_id, ticker, signal_type))
                                 res = await cur.fetchone()
+                                logger.info(f"Looking for channel with server_id={server_id}, ticker={ticker}, signal_type={signal_type}")
+                                logger.info(f"Query result: {res}")
 
                             if res:
                                 channel_id = res[0]
@@ -307,7 +313,7 @@ async def alert_request():
                                                 except Exception:
                                                     pass
                                             if field == 'signal_type':
-                                                if alert['signal_type'].upper() == 'NONE':
+                                                if (alert.get('signal_type') or 'NONE').upper() == 'NONE':
                                                     continue
                                                 else:
                                                     name = 'Advanced Signal'
@@ -318,17 +324,19 @@ async def alert_request():
 
                                     await channel.send(embed=embed)
                                 else:
-                                    print(f"Channel ID {channel_id} not found.")
+                                    logger.error(f"Channel ID {channel_id} not found.")
                             else:
-                                print(f"No channel set for server {server_id} and ticker {ticker}.")
+                                logger.error(f"No channel set for server {server_id} and ticker {ticker}.")
                         else:
-                            print(f"Alerts are disabled for server {server_id}.")
+                            logger.info(f"Alerts are disabled for server {server_id}.")
                     else:
-                        print("ERROR: Missing required keys (server_id, ticker, alert) in alert JSON")
+                        logger.error("ERROR: Missing required keys (server_id, ticker, alert) in alert JSON")
                 else:
                     # Handle non-dict alerts (if needed)
-                    print(f"Received non-dict alert: {alert}")
+                    logger.error(f"Received non-dict alert: {alert}")
         except Exception as e:
             logger.error(f"ERROR while processing alert: {e}")
+            logger.error(traceback.format_exc())
         finally:
-            queue.task_done()
+            if item_added:
+                queue.task_done()

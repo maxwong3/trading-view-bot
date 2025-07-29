@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:latest
+    image: postgres:17.5
     container_name: trading-view-data
     env_file:
       - .env

@@ -38,3 +38,5 @@ networks:
 
 volumes:
   trading-view-data:
+    external: true
+    name: bot-test_trading-view-data

@@ -1,0 +1,22 @@
+import requests
+import json
+
+url = "http://localhost/webhook"
+headers = {"Content-Type": "application/json"}
+
+payload = {
+    "ticker": "BTCUSD",
+    "alert": "BUY SIGNAL!",
+    "secret": "jhohn",
+    "server_id": 1386798662616748153,  # Replace with your server ID
+    "time": "2025-07-28T15:34:00Z",
+    "open": 29500,
+    "close": 29600,
+    "high": 29700,
+    "low": 29400,
+    "interval": "1h",
+    "exchange": "BINANCE"
+}
+
+response = requests.post(url, headers=headers, data=json.dumps(payload))
+print(response.status_code, response.text)

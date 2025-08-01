@@ -52,6 +52,13 @@ async def on_ready():
         logger.error(f"DB initialization error: {e}")
         return
 
+
+# Here either tell users to !setprefix to register the guild to start sending alerts or automatically add guild to the db!
+'''@bot.event
+async def on_guild_join(guild)
+
+'''
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:

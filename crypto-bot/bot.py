@@ -2,6 +2,7 @@ import os
 import discord
 import psycopg
 import psycopg_pool
+import hmac
 
 from discord.ext import commands
 from discord import Embed
@@ -54,10 +55,22 @@ async def on_ready():
 
 
 # Here either tell users to !setprefix to register the guild to start sending alerts or automatically add guild to the db!
-'''@bot.event
-async def on_guild_join(guild)
+@bot.event
+async def on_guild_join(guild):
+    try:
+        async with pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute('''
+                            INSERT INTO servers (server_id, alerts_on, prefix)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (server_id) DO NOTHING
+                ''', (guild.id, True, '!'))
+                await conn.commit()
+    except Exception as e:
+        logger.error(f'DB error in on guild join: {e}')
+        return
 
-'''
+
 
 @bot.event
 async def on_message(message):
@@ -73,7 +86,7 @@ async def hello(ctx):
 async def help(ctx):
     embed = Embed(
         title="Sending alerts with TradingView",
-        description="Send alerts to webhook URL: https://trading-view-bot-0s4c.onrender.com/webhook (This needs to be updated to new url with GCP)"
+        description="Send alerts to webhook URL: https://cryptonest-bot-838976878869.us-central1.run.app/webhook"
     )
 
     json = '''```json
@@ -96,40 +109,29 @@ async def help(ctx):
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
     embed.add_field(name="REQUIRED JSON FIELDS:",value="server_id, ticker, alert", inline=False)
     embed.add_field(name="For added security:",value="Add a secret using !setsecret, webhooks will now require the valid secret to be sent as a field", inline=False)
-    embed.add_field(name="Other commands:", value="!setchannel [ticker, signal (optional)], !removealert, !setsecret [secret], !secret, !removesecret, !alerts, !togglealerts, !setprefix [prefix]", inline=False)
+    embed.add_field(name="Other commands:", value="!set channel [ticker, signal (optional)], !remove alert, !set secret [secret], !secret, !remove secret, !alerts, !togglealerts, !set prefix [prefix]", inline=False)
 
     await ctx.send(embed=embed)
 
-@bot.command()
+@bot.group()
+async def set(ctx):
+    if ctx.invoked_subcommand is None:
+        await ctx.send('Invalid set command, you can use !set [secret/prefix/channel]')
+
+@set.command()
 @commands.has_permissions(administrator=True)
-async def setsecret(ctx, secret=None):
+async def secret(ctx, secret=None):
     if not secret:
         await ctx.send("Make sure to specify a secret password for the server, one that will be required in the json if set")
         return
     await set_secret(ctx.guild.id, secret)
-    await ctx.send("🗝️ Server password set. You must now include the secret property and set the value to the appropriate secret password. !removesecret to remove secret")
+    await ctx.send("🗝️ Server password set. You must now include the secret property and set the value to the appropriate secret password. !remove secret to remove secret")
 
-@bot.command()
+@set.command()
 @commands.has_permissions(administrator=True)
-async def removesecret(ctx):
-    await set_secret(ctx.guild.id, None)
-    await ctx.send("Secret removed. You now no longer need a secret to send webhooks.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def secret(ctx):
-    secret = await get_secret(ctx.guild.id)
-    if secret is None:
-        await ctx.send("There is currently no secret set for this server. !setsecret [secret] to set one.")
-    else:
-        await ctx.send(f"The server secret is: {secret}")
-
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setchannel(ctx, ticker=None, signal=None):
+async def channel(ctx, ticker=None, signal=None):
     if not ticker:
-        await ctx.send("❌ Incorrect usage, specify ticker of active TradingView alert to add: e.g. !setchannel BTCUSD")
+        await ctx.send("❌ Incorrect usage, specify ticker of active TradingView alert to add: e.g. !set channel BTCUSD")
         return
 
     server_id = ctx.guild.id
@@ -142,11 +144,48 @@ async def setchannel(ctx, ticker=None, signal=None):
     else: 
         await ctx.send("Advanced signal " + signal.upper() + " for coin " + ticker.upper() + " will now be sent here in #" + ctx.channel.name)
 
-@bot.command()
+@set.command()
 @commands.has_permissions(administrator=True)
-async def removealert(ctx, ticker=None, signal=None):
+async def prefix(ctx, new_prefix):
+    if not new_prefix:
+        await ctx.send("❌ Incorrect usage, specify prefix: e.g. !set prefix ?")
+        return
+    new_prefix = new_prefix.strip()
+    if len(new_prefix) > 5:
+        await ctx.send("❌ ERROR: Prefix must be 5 characters or less.")
+        return
+    try:
+        async with pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute('''
+                            INSERT INTO servers (server_id, alerts_on, prefix)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (server_id) DO UPDATE
+                            SET prefix = EXCLUDED.prefix;
+                ''', (ctx.guild.id, True, new_prefix))
+                await conn.commit()
+
+            await ctx.send(f"Prefix for this server set to {new_prefix}")
+    except Exception as e:
+        logger.error(f"DB error in setprefix: {e}")
+        return
+
+@bot.group()
+async def remove(ctx):
+    if ctx.invoked_subcommand is None:
+        await ctx.send('Invalid remove command, you can use !remove [secret/alert]')
+
+@remove.command()
+@commands.has_permissions(administrator=True)
+async def secret(ctx):
+    await set_secret(ctx.guild.id, None)
+    await ctx.send("Secret removed. You now no longer need a secret to send webhooks.")
+
+@remove.command()
+@commands.has_permissions(administrator=True)
+async def alert(ctx, ticker=None, signal=None):
     if not ticker:
-        await ctx.send("❌ Incorrect usage, specify ticker of alert to remove: e.g. !removealert BTCUSD")
+        await ctx.send("❌ Incorrect usage, specify ticker of alert to remove: e.g. !remove alert BTCUSD [OPTIONAL SIGNAL TYPE]")
         return
     ticker = ticker.upper()
 
@@ -172,6 +211,15 @@ async def removealert(ctx, ticker=None, signal=None):
     except Exception as e:
         logger.error(f"DB error in removealert: {e}")
         return
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def secret(ctx):
+    secret = await get_secret(ctx.guild.id)
+    if secret is None:
+        await ctx.send("There is currently no secret set for this server. !setsecret [secret] to set one.")
+    else:
+        await ctx.send(f"There is currently a secret for this server. If you forgot it, get an administrator to reset it and set a new one. !remove secret")
 
 
 @bot.command()
@@ -218,32 +266,6 @@ async def alerts(ctx):
             embed.add_field(name=ticker, value=f"Possibly deleted channel with channel ID: {channel_id}")
 
     await ctx.send(embed=embed)
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setprefix(ctx, new_prefix):
-    if not new_prefix:
-        await ctx.send("❌ Incorrect usage, specify prefix: e.g. !setprefix ?")
-        return
-    new_prefix = new_prefix.strip()
-    if len(new_prefix) > 5:
-        await ctx.send("❌ ERROR: Prefix must be 5 characters or less.")
-        return
-    try:
-        async with pool.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute('''
-                            INSERT INTO servers (server_id, alerts_on, prefix)
-                            VALUES (%s, %s, %s)
-                            ON CONFLICT (server_id) DO UPDATE
-                            SET prefix = EXCLUDED.prefix;
-                ''', (ctx.guild.id, True, new_prefix))
-                await conn.commit()
-
-            await ctx.send(f"Prefix for this server set to {new_prefix}")
-    except Exception as e:
-        logger.error(f"DB error in setprefix: {e}")
-        return
         
 
 async def alert_request():
@@ -270,6 +292,7 @@ async def alert_request():
                         secret = alert.get('secret')
                         if secret is not None:
                             secret = secret.strip()
+                            
 
                         async with conn.cursor() as cur:
                             # Check if alerts are enabled for this server
@@ -283,6 +306,12 @@ async def alert_request():
                             # Check if secret set in server
                             if res[1] is not None:
                                 saved_secret = res[1]
+
+                            if saved_secret is not None:    
+                                if not secret or not hmac.compare_digest(secret, saved_secret):
+                                    logger.info("Incorrect secret.")
+                                    continue
+                                logger.info("✅ Secret passed!")
 
                         if alerts_on:
                             async with conn.cursor() as cur:
@@ -302,13 +331,6 @@ async def alert_request():
                                         description=alert['alert'],
                                         color=0x00b05e
                                     )
-                                    # Compare secret
-                                    if saved_secret:
-                                        if secret == saved_secret:
-                                            logger.info("Secret passed!")
-                                        else: 
-                                            logger.info("❌ Incorrect secret.")
-                                            continue
                                     # Optional fields
                                     for field in ['signal_type', 'exchange', 'time', 'interval', 'high', 'low', 'open', 'close']:
                                         if field in alert:
@@ -327,7 +349,7 @@ async def alert_request():
                                                     value = alert[field].upper()
                                             embed.add_field(name=name, value=value, inline=True)
 
-                                    embed.set_footer(text="Data powered with TradingView")
+                                    embed.set_footer(text="Source: TradingView webhooks")
 
                                     await channel.send(embed=embed)
                                 else:

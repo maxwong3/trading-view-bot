@@ -9,10 +9,10 @@ headers = {"Content-Type": "application/json"}
 payload = {
     "ticker": "BTCUSD",
     "alert": "Moving up by 1% last hour",
-    "server_id": 1386798662616748153,  # Replace with your server ID
+    "server_id": 1400939895618535547,  # Replace with your server ID
     "time": "2025-07-28T15:34:00Z",
-    "secret": "",
-    "signal_type":"sell",
+    "signal_type": "buy",
+    "secret": "secret",
     "open": 29500,
     "close": 29600,
     "high": 29700,

@@ -12,6 +12,7 @@ from shared import get_prefix, toggle_alerts, set_channel, set_secret, get_secre
 from db import pool
 from datetime import datetime
 import traceback
+import math
 
 load_dotenv()
 
@@ -109,7 +110,7 @@ async def help(ctx):
     embed.add_field(name="Structure the alert message as a json like this", value=json, inline=False)
     embed.add_field(name="REQUIRED JSON FIELDS:",value="server_id, ticker, alert", inline=False)
     embed.add_field(name="For added security:",value="Add a secret using !setsecret, webhooks will now require the valid secret to be sent as a field", inline=False)
-    embed.add_field(name="Other commands:", value="!set channel [ticker, signal (optional)], !remove alert, !set secret [secret], !secret, !remove secret, !alerts, !togglealerts, !set prefix [prefix]", inline=False)
+    embed.add_field(name="Other commands:", value="!set channel [ticker, signal (optional)], !remove alert, !set secret [secret], !secret, !remove secret, !alerts [page number], !togglealerts, !set prefix [prefix]", inline=False)
 
     await ctx.send(embed=embed)
 
@@ -232,7 +233,7 @@ async def togglealerts(ctx):
         await ctx.send("Alerts are now turned OFF.")
 
 @bot.command()
-async def alerts(ctx):
+async def alerts(ctx, page: int = 1):
     try:
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
@@ -244,18 +245,31 @@ async def alerts(ctx):
                 channels = await cur.fetchall()
 
             if not channels:
-                await ctx.send("No active alerts in this server. Use command !setchannel [ticker] to set an active ticker alert to the channel.")
+                await ctx.send("No active alerts in this server. Use command !set channel [ticker] [signal (optional)] to set an active ticker alert to the channel.")
                 return
     except Exception as e:
         logger.error(f"DB error in alerts: {e}")
         return
 
+    MAX_FIELDS = 25
+    total_pages = math.ceil(len(channels) / MAX_FIELDS)
+
+    if page < 1: 
+        page = 1
+    elif page > total_pages:
+        await ctx.send(f"❌ Page {page} does not exist. There are only {total_pages} pages.")
+        return 
     
+    # The 25 alerts to be sent in this page (from start to end)
+    start = (page - 1) * MAX_FIELDS
+    end = start + MAX_FIELDS
+    alert_page = channels[start:end]
+
     embed = Embed(
-        title="List of Active Alerts"
+        title=f"List of Active Alerts: Page {page} of {total_pages}"
     )
 
-    for ticker, channel_id, signal_type in channels:
+    for ticker, channel_id, signal_type in alert_page:
         channel = bot.get_channel(channel_id)
         if channel:
             if signal_type == 'NONE':  

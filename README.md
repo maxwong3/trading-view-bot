@@ -5,7 +5,3 @@ Receives webhook alerts from TradingView with Flask web server, with a discord b
 .gitignore ignores .env that contains discord bot key.
 
 developed on Python 3.13.4
-
-Max: Main bot receiving TradingView webhooks (main.py). Deployed on Render and monitored with UptimeRobot.
-
-Kevin: Alternate script to deploy CoinGecko alerts with discord webhooks (market_scanner.py)
